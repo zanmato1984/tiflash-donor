@@ -22,6 +22,7 @@
 #include <dlfcn.h>
 #include <filesystem>
 #include <fmt/core.h>
+#include <iostream>
 #include <optional>
 #include <string>
 #include <vector>
@@ -34,9 +35,7 @@ namespace
 constexpr uint32_t EXECUTION_HOST_V2_ABI_VERSION = 4;
 constexpr uint32_t PLAN_KIND_CAST_UTF8_TO_DECIMAL = 1;
 constexpr uint32_t INPUT_ID_SCALAR = 0;
-constexpr uint32_t SQL_MODE_DEFAULT = 1;
-constexpr uint32_t SESSION_CHARSET_UTF8MB4 = 1;
-constexpr uint32_t DEFAULT_COLLATION_UTF8MB4_BIN = 1;
+constexpr uint32_t SQL_MODE_TRUNCATE_AS_WARNING = 2;
 constexpr uint32_t STATUS_KIND_OK = 0;
 constexpr uint32_t STATUS_KIND_PROTOCOL_ERROR = 5;
 constexpr uint32_t STATUS_CODE_NONE = 0;
@@ -236,6 +235,12 @@ std::optional<String> resolveExecutionHostV2LibraryPath()
     return std::nullopt;
 }
 
+bool requiresStrictRuntimeExecution()
+{
+    const char * configured = std::getenv("TIFORTH_REQUIRE_RUNTIME_EXECUTION");
+    return configured != nullptr && configured[0] != '\0' && configured[0] != '0';
+}
+
 bool isValidRow(const TiforthExecutionColumnViewV2 & column, uint32_t row_count, size_t row)
 {
     if (column.null_bitmap == nullptr || row_count == 0)
@@ -346,6 +351,21 @@ struct AdapterRunResult
     uint32_t warning_count = 0;
 };
 
+class ScopedDAGFlags
+{
+public:
+    explicit ScopedDAGFlags(DAGContext & dag_context_)
+        : dag_context(dag_context_)
+        , original_flags(dag_context_.getFlags())
+    {}
+
+    ~ScopedDAGFlags() { dag_context.setFlags(original_flags); }
+
+private:
+    DAGContext & dag_context;
+    UInt64 original_flags;
+};
+
 class TestTiforthExecutionHostV2Cast : public FunctionTest
 {
 public:
@@ -372,14 +392,14 @@ public:
         build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
         build_request.plan_kind = PLAN_KIND_CAST_UTF8_TO_DECIMAL;
         build_request.ambient_requirement_mask = AMBIENT_REQUIREMENT_SQL_MODE;
-        build_request.sql_mode = SQL_MODE_DEFAULT;
-        build_request.session_charset = SESSION_CHARSET_UTF8MB4;
-        build_request.default_collation = DEFAULT_COLLATION_UTF8MB4_BIN;
+        build_request.sql_mode = SQL_MODE_TRUNCATE_AS_WARNING;
+        build_request.session_charset = 0;
+        build_request.default_collation = 0;
         build_request.decimal_precision_is_set = true;
         build_request.decimal_precision = 10;
         build_request.decimal_scale_is_set = true;
         build_request.decimal_scale = 3;
-        build_request.max_block_size = 256;
+        build_request.max_block_size = 0;
 
         TiforthStatusV2 status{};
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -480,10 +500,15 @@ public:
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
 {
+    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
     auto maybe_library = resolveExecutionHostV2LibraryPath();
     if (!maybe_library.has_value())
     {
-        SUCCEED() << "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        const String message
+            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        if (strict_runtime_execution)
+            GTEST_FAIL() << message;
+        SUCCEED() << message;
         return;
     }
 
@@ -491,11 +516,16 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
     auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
     if (!maybe_api.has_value())
     {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
         SUCCEED() << load_error;
         return;
     }
 
     auto api = std::move(maybe_api.value());
+    auto & dag_context = getDAGContext();
+    ScopedDAGFlags scoped_dag_flags(dag_context);
+    dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
 
     const std::vector<std::optional<String>> input = {
         String("12.345"),
@@ -507,7 +537,7 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
     };
 
     auto donor_native = runDonorNativeCastAsString(input);
-    const auto donor_warning_count = getDAGContext().getWarningCount();
+    const auto donor_warning_count = dag_context.getWarningCount();
 
     AdapterRunResult serial;
     runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
@@ -519,14 +549,23 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
 
     ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(serial.output), donor_native);
     ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
+
+    std::cout << "[tiforth-host-v2-cast] serial=1 warnings=" << serial.warning_count << " rows=" << serial.output.size()
+              << " parallel=2 warnings=" << parallel.warning_count << " rows=" << parallel.output.size()
+              << " donor_warnings=" << donor_warning_count << " parity=ok" << std::endl;
 }
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel)
 {
+    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
     auto maybe_library = resolveExecutionHostV2LibraryPath();
     if (!maybe_library.has_value())
     {
-        SUCCEED() << "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        const String message
+            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        if (strict_runtime_execution)
+            GTEST_FAIL() << message;
+        SUCCEED() << message;
         return;
     }
 
@@ -534,11 +573,16 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
     auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
     if (!maybe_api.has_value())
     {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
         SUCCEED() << load_error;
         return;
     }
 
     auto api = std::move(maybe_api.value());
+    auto & dag_context = getDAGContext();
+    ScopedDAGFlags scoped_dag_flags(dag_context);
+    dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
 
     const std::vector<std::optional<String>> input = {
         String("1.2395"),
@@ -549,7 +593,7 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
     };
 
     auto donor_native = runDonorNativeCastAsString(input);
-    const auto donor_warning_count = static_cast<uint32_t>(getDAGContext().getWarningCount());
+    const auto donor_warning_count = static_cast<uint32_t>(dag_context.getWarningCount());
     ASSERT_GT(donor_warning_count, 0u);
 
     AdapterRunResult serial;
@@ -562,6 +606,11 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
 
     ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(serial.output), donor_native);
     ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
+
+    std::cout << "[tiforth-host-v2-cast-scale-loss] serial=1 warnings=" << serial.warning_count
+              << " rows=" << serial.output.size() << " parallel=2 warnings=" << parallel.warning_count
+              << " rows=" << parallel.output.size() << " donor_warnings=" << donor_warning_count << " parity=ok"
+              << std::endl;
 }
 
 } // namespace

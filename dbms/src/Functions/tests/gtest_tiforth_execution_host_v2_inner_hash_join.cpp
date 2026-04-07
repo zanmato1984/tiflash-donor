@@ -25,6 +25,7 @@
 #include <dlfcn.h>
 #include <filesystem>
 #include <fmt/core.h>
+#include <iostream>
 #include <optional>
 #include <string>
 #include <utility>
@@ -122,6 +123,11 @@ struct TiforthExecutionHostV2Api
         TiforthStatusV2 *,
         TiforthBatchViewV2 *);
     using DriveEndOfInputFn = void (*) (TiforthExecutionInstanceHandleV2 *, uint32_t, TiforthStatusV2 *);
+    using DriveEndOfInputWithOutputFn = void (*) (
+        TiforthExecutionInstanceHandleV2 *,
+        uint32_t,
+        TiforthStatusV2 *,
+        TiforthBatchViewV2 *);
     using ContinueOutputFn = void (*) (TiforthExecutionInstanceHandleV2 *, TiforthStatusV2 *, TiforthBatchViewV2 *);
     using FinishFn = void (*) (TiforthExecutionInstanceHandleV2 *, TiforthStatusV2 *);
     using ReleaseExecutableFn = void (*) (TiforthExecutionExecutableHandleV2 *);
@@ -132,6 +138,7 @@ struct TiforthExecutionHostV2Api
     OpenFn open = nullptr;
     DriveInputBatchFn drive_input_batch = nullptr;
     DriveEndOfInputFn drive_end_of_input = nullptr;
+    DriveEndOfInputWithOutputFn drive_end_of_input_with_output = nullptr;
     ContinueOutputFn continue_output = nullptr;
     FinishFn finish = nullptr;
     ReleaseExecutableFn release_executable = nullptr;
@@ -153,6 +160,7 @@ struct TiforthExecutionHostV2Api
         open = other.open;
         drive_input_batch = other.drive_input_batch;
         drive_end_of_input = other.drive_end_of_input;
+        drive_end_of_input_with_output = other.drive_end_of_input_with_output;
         continue_output = other.continue_output;
         finish = other.finish;
         release_executable = other.release_executable;
@@ -163,6 +171,7 @@ struct TiforthExecutionHostV2Api
         other.open = nullptr;
         other.drive_input_batch = nullptr;
         other.drive_end_of_input = nullptr;
+        other.drive_end_of_input_with_output = nullptr;
         other.continue_output = nullptr;
         other.finish = nullptr;
         other.release_executable = nullptr;
@@ -217,6 +226,11 @@ std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(const String & l
         || !loadSymbol(handle, "tiforth_execution_host_v2_open", api.open, error)
         || !loadSymbol(handle, "tiforth_execution_host_v2_drive_input_batch", api.drive_input_batch, error)
         || !loadSymbol(handle, "tiforth_execution_host_v2_drive_end_of_input", api.drive_end_of_input, error)
+        || !loadSymbol(
+            handle,
+            "tiforth_execution_host_v2_drive_end_of_input_with_output",
+            api.drive_end_of_input_with_output,
+            error)
         || !loadSymbol(handle, "tiforth_execution_host_v2_continue_output", api.continue_output, error)
         || !loadSymbol(handle, "tiforth_execution_host_v2_finish", api.finish, error)
         || !loadSymbol(handle, "tiforth_execution_host_v2_release_executable", api.release_executable, error)
@@ -238,6 +252,12 @@ std::optional<String> resolveExecutionHostV2LibraryPath()
     }
 
     return std::nullopt;
+}
+
+bool requiresStrictRuntimeExecution()
+{
+    const char * configured = std::getenv("TIFORTH_REQUIRE_RUNTIME_EXECUTION");
+    return configured != nullptr && configured[0] != '\0' && configured[0] != '0';
 }
 
 bool isValidRow(const TiforthExecutionColumnViewV2 & column, uint32_t row_count, size_t row)
@@ -635,7 +655,7 @@ public:
         build_request.decimal_precision = 0;
         build_request.decimal_scale_is_set = false;
         build_request.decimal_scale = 0;
-        build_request.max_block_size = 1;
+        build_request.max_block_size = 0;
 
         TiforthStatusV2 status{};
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -720,14 +740,22 @@ public:
 
         drive_input_rows(build_rows, INPUT_ID_BUILD);
 
-        api.drive_end_of_input(instance, INPUT_ID_BUILD, &status);
+        TiforthBatchViewV2 build_end_output{};
+        build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(build_end_output, result.rows);
         drain_output();
 
         drive_input_rows(probe_rows, INPUT_ID_PROBE);
 
-        api.drive_end_of_input(instance, INPUT_ID_PROBE, &status);
+        TiforthBatchViewV2 probe_end_output{};
+        probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(probe_end_output, result.rows);
         drain_output();
 
         api.finish(instance, &status);
@@ -757,7 +785,7 @@ public:
         build_request.decimal_precision = 0;
         build_request.decimal_scale_is_set = false;
         build_request.decimal_scale = 0;
-        build_request.max_block_size = 1;
+        build_request.max_block_size = 0;
 
         TiforthStatusV2 status{};
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -840,14 +868,22 @@ public:
 
         drive_input_rows(build_rows, INPUT_ID_BUILD);
 
-        api.drive_end_of_input(instance, INPUT_ID_BUILD, &status);
+        TiforthBatchViewV2 build_end_output{};
+        build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(build_end_output, result.rows);
         drain_output();
 
         drive_input_rows(probe_rows, INPUT_ID_PROBE);
 
-        api.drive_end_of_input(instance, INPUT_ID_PROBE, &status);
+        TiforthBatchViewV2 probe_end_output{};
+        probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(probe_end_output, result.rows);
         drain_output();
 
         api.finish(instance, &status);
@@ -877,7 +913,7 @@ public:
         build_request.decimal_precision = 0;
         build_request.decimal_scale_is_set = false;
         build_request.decimal_scale = 0;
-        build_request.max_block_size = 1;
+        build_request.max_block_size = 0;
 
         TiforthStatusV2 status{};
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -961,14 +997,22 @@ public:
 
         drive_input_rows(build_rows, INPUT_ID_BUILD);
 
-        api.drive_end_of_input(instance, INPUT_ID_BUILD, &status);
+        TiforthBatchViewV2 build_end_output{};
+        build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(build_end_output, result.rows);
         drain_output();
 
         drive_input_rows(probe_rows, INPUT_ID_PROBE);
 
-        api.drive_end_of_input(instance, INPUT_ID_PROBE, &status);
+        TiforthBatchViewV2 probe_end_output{};
+        probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(probe_end_output, result.rows);
         drain_output();
 
         api.finish(instance, &status);
@@ -984,10 +1028,15 @@ public:
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerialAndParallel)
 {
+    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
     auto maybe_library = resolveExecutionHostV2LibraryPath();
     if (!maybe_library.has_value())
     {
-        SUCCEED() << "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        const String message
+            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        if (strict_runtime_execution)
+            GTEST_FAIL() << message;
+        SUCCEED() << message;
         return;
     }
 
@@ -995,6 +1044,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
     auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
     if (!maybe_api.has_value())
     {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
         SUCCEED() << load_error;
         return;
     }
@@ -1017,14 +1068,24 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
 
     ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
     ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-inner-join] serial=1 warnings=" << adapter_serial.warning_count
+              << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
+              << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
+              << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
 {
+    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
     auto maybe_library = resolveExecutionHostV2LibraryPath();
     if (!maybe_library.has_value())
     {
-        SUCCEED() << "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        const String message
+            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        if (strict_runtime_execution)
+            GTEST_FAIL() << message;
+        SUCCEED() << message;
         return;
     }
 
@@ -1032,6 +1093,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
     auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
     if (!maybe_api.has_value())
     {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
         SUCCEED() << load_error;
         return;
     }
@@ -1054,14 +1117,24 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
 
     ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
     ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-build-outer-join] serial=1 warnings=" << adapter_serial.warning_count
+              << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
+              << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
+              << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParitySerialAndParallel)
 {
+    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
     auto maybe_library = resolveExecutionHostV2LibraryPath();
     if (!maybe_library.has_value())
     {
-        SUCCEED() << "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        const String message
+            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
+        if (strict_runtime_execution)
+            GTEST_FAIL() << message;
+        SUCCEED() << message;
         return;
     }
 
@@ -1069,6 +1142,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityS
     auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
     if (!maybe_api.has_value())
     {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
         SUCCEED() << load_error;
         return;
     }
@@ -1091,6 +1166,11 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityS
 
     ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
     ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-probe-outer-join] serial=1 warnings=" << adapter_serial.warning_count
+              << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
+              << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
+              << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
 } // namespace
