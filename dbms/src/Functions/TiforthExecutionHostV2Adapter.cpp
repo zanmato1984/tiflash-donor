@@ -256,18 +256,23 @@ struct Utf8BatchOwned
     TiforthExecutionColumnViewV2 column{};
     TiforthBatchViewV2 batch{};
 
-    Utf8BatchOwned(const std::vector<std::optional<String>> & rows, uint32_t ownership_mode)
+    Utf8BatchOwned(
+        const std::vector<std::optional<String>> & rows,
+        size_t start,
+        size_t end,
+        uint32_t ownership_mode)
     {
-        null_bitmap.assign(rows.empty() ? 0 : (rows.size() + 7) / 8, 0);
-        offsets.reserve(rows.size() + 1);
+        const size_t row_count = end - start;
+        null_bitmap.assign(row_count == 0 ? 0 : (row_count + 7) / 8, 0);
+        offsets.reserve(row_count + 1);
         offsets.push_back(0);
 
-        for (size_t i = 0; i < rows.size(); ++i)
+        for (size_t row = start, i = 0; row < end; ++row, ++i)
         {
-            if (rows[i].has_value())
+            if (rows[row].has_value())
             {
                 null_bitmap[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-                data.append(rows[i].value());
+                data.append(rows[row].value());
             }
             offsets.push_back(static_cast<int32_t>(data.size()));
         }
@@ -288,7 +293,7 @@ struct Utf8BatchOwned
         batch.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
         batch.ownership_mode = ownership_mode;
         batch.column_count = 1;
-        batch.row_count = static_cast<uint32_t>(rows.size());
+        batch.row_count = static_cast<uint32_t>(row_count);
         batch.columns = &column;
     }
 };
@@ -305,28 +310,33 @@ struct Utf8Int64JoinBatchOwned
     TiforthExecutionColumnViewV2 columns[2]{};
     TiforthBatchViewV2 batch{};
 
-    Utf8Int64JoinBatchOwned(const std::vector<Utf8Int64Row> & rows, uint32_t ownership_mode)
+    Utf8Int64JoinBatchOwned(
+        const std::vector<Utf8Int64Row> & rows,
+        size_t start,
+        size_t end,
+        uint32_t ownership_mode)
     {
-        key_null_bitmap.assign(rows.empty() ? 0 : (rows.size() + 7) / 8, 0);
-        key_offsets.reserve(rows.size() + 1);
+        const size_t row_count = end - start;
+        key_null_bitmap.assign(row_count == 0 ? 0 : (row_count + 7) / 8, 0);
+        key_offsets.reserve(row_count + 1);
         key_offsets.push_back(0);
 
-        payload_values.reserve(rows.size());
-        payload_null_bitmap.assign(rows.empty() ? 0 : (rows.size() + 7) / 8, 0);
+        payload_values.reserve(row_count);
+        payload_null_bitmap.assign(row_count == 0 ? 0 : (row_count + 7) / 8, 0);
 
-        for (size_t i = 0; i < rows.size(); ++i)
+        for (size_t row = start, i = 0; row < end; ++row, ++i)
         {
-            if (rows[i].first.has_value())
+            if (rows[row].first.has_value())
             {
                 key_null_bitmap[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-                key_data.append(rows[i].first.value());
+                key_data.append(rows[row].first.value());
             }
             key_offsets.push_back(static_cast<int32_t>(key_data.size()));
 
-            if (rows[i].second.has_value())
+            if (rows[row].second.has_value())
             {
                 payload_null_bitmap[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-                payload_values.push_back(rows[i].second.value());
+                payload_values.push_back(rows[row].second.value());
             }
             else
             {
@@ -363,7 +373,7 @@ struct Utf8Int64JoinBatchOwned
         batch.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
         batch.ownership_mode = ownership_mode;
         batch.column_count = 2;
-        batch.row_count = static_cast<uint32_t>(rows.size());
+        batch.row_count = static_cast<uint32_t>(row_count);
         batch.columns = columns;
     }
 };
@@ -379,30 +389,35 @@ struct Int64Int64JoinBatchOwned
     TiforthExecutionColumnViewV2 columns[2]{};
     TiforthBatchViewV2 batch{};
 
-    Int64Int64JoinBatchOwned(const std::vector<Int64Int64Row> & rows, uint32_t ownership_mode)
+    Int64Int64JoinBatchOwned(
+        const std::vector<Int64Int64Row> & rows,
+        size_t start,
+        size_t end,
+        uint32_t ownership_mode)
     {
-        key_values.reserve(rows.size());
-        key_null_bitmap.assign(rows.empty() ? 0 : (rows.size() + 7) / 8, 0);
+        const size_t row_count = end - start;
+        key_values.reserve(row_count);
+        key_null_bitmap.assign(row_count == 0 ? 0 : (row_count + 7) / 8, 0);
 
-        payload_values.reserve(rows.size());
-        payload_null_bitmap.assign(rows.empty() ? 0 : (rows.size() + 7) / 8, 0);
+        payload_values.reserve(row_count);
+        payload_null_bitmap.assign(row_count == 0 ? 0 : (row_count + 7) / 8, 0);
 
-        for (size_t i = 0; i < rows.size(); ++i)
+        for (size_t row = start, i = 0; row < end; ++row, ++i)
         {
-            if (rows[i].first.has_value())
+            if (rows[row].first.has_value())
             {
                 key_null_bitmap[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-                key_values.push_back(rows[i].first.value());
+                key_values.push_back(rows[row].first.value());
             }
             else
             {
                 key_values.push_back(0);
             }
 
-            if (rows[i].second.has_value())
+            if (rows[row].second.has_value())
             {
                 payload_null_bitmap[i / 8] |= static_cast<uint8_t>(1u << (i % 8));
-                payload_values.push_back(rows[i].second.value());
+                payload_values.push_back(rows[row].second.value());
             }
             else
             {
@@ -439,7 +454,7 @@ struct Int64Int64JoinBatchOwned
         batch.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
         batch.ownership_mode = ownership_mode;
         batch.column_count = 2;
-        batch.row_count = static_cast<uint32_t>(rows.size());
+        batch.row_count = static_cast<uint32_t>(row_count);
         batch.columns = columns;
     }
 };
@@ -578,20 +593,16 @@ CastRunResult runCastUtf8ToDecimal(
     for (size_t start = 0; start < input.size(); start += chunk_size)
     {
         const size_t end = std::min(input.size(), start + chunk_size);
-        std::vector<std::optional<String>> batch_rows(
-            input.begin() + static_cast<ptrdiff_t>(start),
-            input.begin() + static_cast<ptrdiff_t>(end));
-
         const TiforthBatchViewV2 * input_batch = nullptr;
         std::optional<Utf8BatchOwned> borrowed_batch;
         if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
         {
-            retained_batches.emplace_back(batch_rows, ownership_mode);
+            retained_batches.emplace_back(input, start, end, ownership_mode);
             input_batch = &retained_batches.back().batch;
         }
         else
         {
-            borrowed_batch.emplace(batch_rows, ownership_mode);
+            borrowed_batch.emplace(input, start, end, ownership_mode);
             input_batch = &borrowed_batch->batch;
         }
 
@@ -670,20 +681,16 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
         for (size_t start = 0; start < rows.size(); start += chunk_size)
         {
             const size_t end = std::min(rows.size(), start + chunk_size);
-            std::vector<Utf8Int64Row> chunk(
-                rows.begin() + static_cast<ptrdiff_t>(start),
-                rows.begin() + static_cast<ptrdiff_t>(end));
-
             const TiforthBatchViewV2 * input_batch = nullptr;
             std::optional<Utf8Int64JoinBatchOwned> borrowed_batch;
             if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
             {
-                retained_batches.emplace_back(chunk, ownership_mode);
+                retained_batches.emplace_back(rows, start, end, ownership_mode);
                 input_batch = &retained_batches.back().batch;
             }
             else
             {
-                borrowed_batch.emplace(chunk, ownership_mode);
+                borrowed_batch.emplace(rows, start, end, ownership_mode);
                 input_batch = &borrowed_batch->batch;
             }
 
@@ -763,20 +770,16 @@ JoinRunResult runJoinInt64KeyInt64Payload(
         for (size_t start = 0; start < rows.size(); start += chunk_size)
         {
             const size_t end = std::min(rows.size(), start + chunk_size);
-            std::vector<Int64Int64Row> chunk(
-                rows.begin() + static_cast<ptrdiff_t>(start),
-                rows.begin() + static_cast<ptrdiff_t>(end));
-
             const TiforthBatchViewV2 * input_batch = nullptr;
             std::optional<Int64Int64JoinBatchOwned> borrowed_batch;
             if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
             {
-                retained_batches.emplace_back(chunk, ownership_mode);
+                retained_batches.emplace_back(rows, start, end, ownership_mode);
                 input_batch = &retained_batches.back().batch;
             }
             else
             {
-                borrowed_batch.emplace(chunk, ownership_mode);
+                borrowed_batch.emplace(rows, start, end, ownership_mode);
                 input_batch = &borrowed_batch->batch;
             }
 
