@@ -346,6 +346,16 @@ if (ENABLE_TESTS)
         ""
         CACHE FILEPATH
               "Absolute path to libtiforth_ffi_c shared library used by TiForth host-v2 linked donor adapter gtests")
+    set(
+        TIFORTH_FFI_C_LIB_DIR
+        ""
+        CACHE PATH
+              "Directory that contains libtiforth_ffi_c for TiForth host-v2 linked donor adapter gtests")
+    set(
+        TIFORTH_FFI_C_LIB_NAME
+        "tiforth_ffi_c"
+        CACHE STRING
+              "Library name used with TIFORTH_FFI_C_LIB_DIR for TiForth host-v2 linked donor adapter gtests")
 
     # attach all dbms gtest sources
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
@@ -363,20 +373,38 @@ if (ENABLE_TESTS)
 
     target_link_libraries(gtests_dbms test_util_gtest_main tiflash_functions tiflash-dttool-lib delta_merge kvstore)
     if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
-        if ("${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
-            message(
-                FATAL_ERROR
-                    "ENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON requires "
-                    "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib>")
+        set(_tiforth_ffi_c_link_target "")
+        if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
+            if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
+            endif ()
+            set(_tiforth_ffi_c_link_target "${TIFORTH_FFI_C_LIBRARY}")
+        else ()
+            if ("${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
+                message(
+                    FATAL_ERROR
+                        "ENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON requires either "
+                        "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
+                        "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir "
+                        "(-DTIFORTH_FFI_C_LIB_NAME defaults to tiforth_ffi_c)")
+            endif ()
+            if (NOT IS_DIRECTORY "${TIFORTH_FFI_C_LIB_DIR}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIB_DIR is not a directory: ${TIFORTH_FFI_C_LIB_DIR}")
+            endif ()
+            if ("${TIFORTH_FFI_C_LIB_NAME}" STREQUAL "")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIB_NAME must be non-empty when TIFORTH_FFI_C_LIB_DIR is used")
+            endif ()
+            target_link_directories(gtests_dbms PRIVATE "${TIFORTH_FFI_C_LIB_DIR}")
+            set(_tiforth_ffi_c_link_target "${TIFORTH_FFI_C_LIB_NAME}")
         endif ()
-        if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
-            message(
-                FATAL_ERROR
-                    "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
-        endif ()
-
         target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
-        target_link_libraries(gtests_dbms "${TIFORTH_FFI_C_LIBRARY}")
+        target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
     endif ()
 
     install (TARGETS gtests_dbms

@@ -196,7 +196,10 @@ std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error)
 #else
     error
         = "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON "
-          "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> to run this donor adapter test";
+          "and either -DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
+          "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir "
+          "(-DTIFORTH_FFI_C_LIB_NAME defaults to tiforth_ffi_c) "
+          "to run this donor adapter test";
     return std::nullopt;
 #endif
 }
