@@ -568,6 +568,7 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningPari
 
     auto donor_native = runDonorNativeCastAsString(input);
     const auto donor_warning_count = static_cast<uint32_t>(dag_context.getWarningCount());
+    ASSERT_EQ(donor_warning_count, 0u);
 
     AdapterRunResult serial;
     runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);

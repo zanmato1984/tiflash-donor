@@ -369,10 +369,50 @@ if (ENABLE_TESTS)
                     "ENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON requires "
                     "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib>")
         endif ()
+        if (NOT IS_ABSOLUTE "${TIFORTH_FFI_C_LIBRARY}")
+            message(
+                FATAL_ERROR
+                    "TIFORTH_FFI_C_LIBRARY must be an absolute path, got: ${TIFORTH_FFI_C_LIBRARY}")
+        endif ()
         if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
             message(
                 FATAL_ERROR
                     "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
+        endif ()
+        if ("${CMAKE_NM}" STREQUAL "" OR NOT EXISTS "${CMAKE_NM}")
+            message(
+                WARNING
+                    "CMAKE_NM is unavailable; skipping TiForth host-v2 symbol preflight for ${TIFORTH_FFI_C_LIBRARY}")
+        else ()
+            set(_tiforth_required_host_v2_symbols
+                tiforth_execution_host_v2_build
+                tiforth_execution_host_v2_open
+                tiforth_execution_host_v2_drive_input_batch
+                tiforth_execution_host_v2_drive_end_of_input
+                tiforth_execution_host_v2_drive_end_of_input_with_output
+                tiforth_execution_host_v2_continue_output
+                tiforth_execution_host_v2_finish
+                tiforth_execution_host_v2_release_executable
+                tiforth_execution_host_v2_release_instance)
+            execute_process(
+                COMMAND "${CMAKE_NM}" -g "${TIFORTH_FFI_C_LIBRARY}"
+                RESULT_VARIABLE _tiforth_nm_result
+                OUTPUT_VARIABLE _tiforth_nm_output
+                ERROR_VARIABLE _tiforth_nm_error)
+            if (NOT _tiforth_nm_result EQUAL 0)
+                message(
+                    FATAL_ERROR
+                        "Failed to inspect host-v2 symbols in ${TIFORTH_FFI_C_LIBRARY} using ${CMAKE_NM}: ${_tiforth_nm_error}")
+            endif ()
+            foreach(_tiforth_symbol IN LISTS _tiforth_required_host_v2_symbols)
+                string(FIND "${_tiforth_nm_output}" "${_tiforth_symbol}" _tiforth_symbol_index)
+                if (_tiforth_symbol_index EQUAL -1)
+                    message(
+                        FATAL_ERROR
+                            "TIFORTH_FFI_C_LIBRARY is missing required host-v2 symbol `${_tiforth_symbol}`; "
+                            "choose a libtiforth_ffi_c build that exports host-v2 entrypoints.")
+                endif ()
+            endforeach ()
         endif ()
 
         target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
