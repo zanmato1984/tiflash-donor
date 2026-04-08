@@ -374,6 +374,7 @@ if (ENABLE_TESTS)
     target_link_libraries(gtests_dbms test_util_gtest_main tiflash_functions tiflash-dttool-lib delta_merge kvstore)
     if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
         set(_tiforth_ffi_c_link_target "")
+        set(_tiforth_ffi_c_rpath_dir "")
         if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
             if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
                 message(
@@ -381,6 +382,7 @@ if (ENABLE_TESTS)
                         "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
             endif ()
             set(_tiforth_ffi_c_link_target "${TIFORTH_FFI_C_LIBRARY}")
+            get_filename_component(_tiforth_ffi_c_rpath_dir "${TIFORTH_FFI_C_LIBRARY}" DIRECTORY)
         else ()
             if ("${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
                 message(
@@ -400,11 +402,24 @@ if (ENABLE_TESTS)
                     FATAL_ERROR
                         "TIFORTH_FFI_C_LIB_NAME must be non-empty when TIFORTH_FFI_C_LIB_DIR is used")
             endif ()
-            target_link_directories(gtests_dbms PRIVATE "${TIFORTH_FFI_C_LIB_DIR}")
-            set(_tiforth_ffi_c_link_target "${TIFORTH_FFI_C_LIB_NAME}")
+            find_library(
+                _tiforth_ffi_c_named_library
+                NAMES "${TIFORTH_FFI_C_LIB_NAME}"
+                PATHS "${TIFORTH_FFI_C_LIB_DIR}"
+                NO_DEFAULT_PATH)
+            if ("${_tiforth_ffi_c_named_library}" STREQUAL "_tiforth_ffi_c_named_library-NOTFOUND")
+                message(
+                    FATAL_ERROR
+                        "Cannot find ${TIFORTH_FFI_C_LIB_NAME} under TIFORTH_FFI_C_LIB_DIR=${TIFORTH_FFI_C_LIB_DIR}")
+            endif ()
+            set(_tiforth_ffi_c_link_target "${_tiforth_ffi_c_named_library}")
+            set(_tiforth_ffi_c_rpath_dir "${TIFORTH_FFI_C_LIB_DIR}")
         endif ()
         target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
         target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
+        if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
+            set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
+        endif ()
     endif ()
 
     install (TARGETS gtests_dbms
