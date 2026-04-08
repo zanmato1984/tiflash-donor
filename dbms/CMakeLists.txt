@@ -375,7 +375,19 @@ if (ENABLE_TESTS)
     if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
         set(_tiforth_ffi_c_link_target "")
         set(_tiforth_ffi_c_rpath_dir "")
+        if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "" AND NOT "${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
+            message(
+                FATAL_ERROR
+                    "Set only one TiForth linked-library input: "
+                    "either -DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
+                    "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir (with optional -DTIFORTH_FFI_C_LIB_NAME)")
+        endif ()
         if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
+            if (NOT IS_ABSOLUTE "${TIFORTH_FFI_C_LIBRARY}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIBRARY must be an absolute path: ${TIFORTH_FFI_C_LIBRARY}")
+            endif ()
             if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
                 message(
                     FATAL_ERROR
@@ -391,6 +403,11 @@ if (ENABLE_TESTS)
                         "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
                         "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir "
                         "(-DTIFORTH_FFI_C_LIB_NAME defaults to tiforth_ffi_c)")
+            endif ()
+            if (NOT IS_ABSOLUTE "${TIFORTH_FFI_C_LIB_DIR}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIB_DIR must be an absolute path: ${TIFORTH_FFI_C_LIB_DIR}")
             endif ()
             if (NOT IS_DIRECTORY "${TIFORTH_FFI_C_LIB_DIR}")
                 message(
@@ -420,6 +437,14 @@ if (ENABLE_TESTS)
 
         target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
         target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
+        message(
+            STATUS
+                "TiForth host-v2 linked donor adapter tests: gtests_dbms links ${_tiforth_ffi_c_link_target}")
+        message(
+            STATUS
+                "TiForth host-v2 linked donor adapter strict run: "
+                "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 ctest --test-dir ${CMAKE_BINARY_DIR} "
+                "-R TestTiforthExecutionHostV2 --output-on-failure")
         if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
             set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
             set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
