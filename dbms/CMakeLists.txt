@@ -359,6 +359,12 @@ if (ENABLE_TESTS)
 
     # attach all dbms gtest sources
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
+    if (NOT ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
+        list(
+            FILTER dbms_gtest_sources
+            EXCLUDE
+            REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
+    endif ()
     add_executable(gtests_dbms EXCLUDE_FROM_ALL
         ${dbms_gtest_sources}
         ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
