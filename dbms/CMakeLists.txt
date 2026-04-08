@@ -408,7 +408,7 @@ if (ENABLE_TESTS)
         foreach(_tiforth_symbol IN LISTS _tiforth_required_host_v2_symbols)
             string(
                 REGEX MATCH
-                    "(^|\\n)[^\\n]*[ \t]${_tiforth_symbol}(\\n|$)"
+                    "(^|[^A-Za-z0-9_])_?${_tiforth_symbol}([^A-Za-z0-9_]|$)"
                     _tiforth_symbol_match
                     "${_tiforth_nm_output}")
             if ("${_tiforth_symbol_match}" STREQUAL "")
