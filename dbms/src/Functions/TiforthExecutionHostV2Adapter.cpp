@@ -523,6 +523,29 @@ void drainJoinOutput(
     }
 }
 
+void drainCastOutput(
+    const TiforthExecutionHostV2Api & api,
+    TiforthExecutionInstanceHandleV2 * instance,
+    TiforthStatusV2 & status,
+    CastRunResult & result)
+{
+    while (status.code == STATUS_CODE_MORE_OUTPUT_AVAILABLE)
+    {
+        auto continued_output = makeBatch();
+        status = makeStatus();
+        api.continue_output(instance, &status, &continued_output);
+        ensureStatusKindOk("continue_output", status);
+        result.warning_count += status.warning_count;
+        appendCastOutputRows(continued_output, result.output);
+    }
+
+    if (status.code != STATUS_CODE_NONE)
+    {
+        throw std::runtime_error(
+            fmt::format("cast produced unexpected status code {}", status.code));
+    }
+}
+
 } // namespace
 
 std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error)
@@ -562,7 +585,8 @@ CastRunResult runCastUtf8ToDecimal(
     uint32_t ownership_mode,
     uint32_t sql_mode,
     uint8_t decimal_precision,
-    int8_t decimal_scale)
+    int8_t decimal_scale,
+    uint32_t max_block_size)
 {
     TiforthExecutionBuildRequestV2 build_request{};
     build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -575,7 +599,7 @@ CastRunResult runCastUtf8ToDecimal(
     build_request.decimal_precision = decimal_precision;
     build_request.decimal_scale_is_set = true;
     build_request.decimal_scale = decimal_scale;
-    build_request.max_block_size = 0;
+    build_request.max_block_size = max_block_size;
 
     ExecutionHandles handles(api);
     TiforthExecutionInstanceHandleV2 * instance = handles.buildAndOpen(build_request);
@@ -609,32 +633,17 @@ CastRunResult runCastUtf8ToDecimal(
         auto status = makeStatus();
         auto output = makeBatch();
         api.drive_input_batch(instance, INPUT_ID_SCALAR, input_batch, &status, &output);
-        ensureStatusOk("drive_input_batch", status);
+        ensureStatusKindOk("drive_input_batch", status);
         result.warning_count += status.warning_count;
         appendCastOutputRows(output, result.output);
+        drainCastOutput(api, instance, status, result);
     }
 
     auto status = makeStatus();
     api.drive_end_of_input(instance, INPUT_ID_SCALAR, &status);
-    ensureStatusOk("drive_end_of_input", status);
-
-    auto continued_output = makeBatch();
-    status = makeStatus();
-    api.continue_output(instance, &status, &continued_output);
-    if (status.kind == STATUS_KIND_OK)
-    {
-        if (status.code != STATUS_CODE_NONE)
-            throwStatusError("continue_output", status);
-        if (continued_output.row_count != 0 || continued_output.column_count != 0)
-        {
-            throw std::runtime_error(
-                "continue_output returned unexpected rows for scalar cast execution");
-        }
-    }
-    else if (!(status.kind == STATUS_KIND_PROTOCOL_ERROR && status.code == STATUS_CODE_INSTANCE_FINISH_ONLY))
-    {
-        throwStatusError("continue_output", status);
-    }
+    ensureStatusKindOk("drive_end_of_input", status);
+    result.warning_count += status.warning_count;
+    drainCastOutput(api, instance, status, result);
 
     status = makeStatus();
     api.finish(instance, &status);
