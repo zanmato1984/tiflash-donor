@@ -360,6 +360,12 @@ option (ENABLE_TESTS "Enables unit tests" ${ENABLE_TESTS_DEFAULT})
 
 add_subdirectory (contrib) # Should be done after option ENABLE_TESTS, cause we will disable tests under contrib/
 
+if (OS_DARWIN AND TARGET Foundation)
+    # libc++ under C++23 no longer guarantees std::system_error transitively
+    # from <mutex> used in Poco Event.cpp.
+    target_compile_options(Foundation PRIVATE "$<$<COMPILE_LANGUAGE:CXX>:-include;system_error>")
+endif ()
+
 # Enable failpoints injection by default when ENABLE_TESTS is turn ON.
 if (ENABLE_TESTS)
     enable_testing()
