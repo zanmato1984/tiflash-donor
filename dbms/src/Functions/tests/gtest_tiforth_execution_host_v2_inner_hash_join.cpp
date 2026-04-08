@@ -22,8 +22,6 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstdlib>
-#include <dlfcn.h>
-#include <filesystem>
 #include <fmt/core.h>
 #include <iostream>
 #include <optional>
@@ -106,6 +104,42 @@ struct TiforthStatusV2
 struct TiforthExecutionExecutableHandleV2;
 struct TiforthExecutionInstanceHandleV2;
 
+extern "C"
+{
+void tiforth_execution_host_v2_build(
+    const TiforthExecutionBuildRequestV2 * request,
+    TiforthStatusV2 * out_status,
+    TiforthExecutionExecutableHandleV2 ** out_executable);
+void tiforth_execution_host_v2_open(
+    const TiforthExecutionExecutableHandleV2 * executable,
+    TiforthStatusV2 * out_status,
+    TiforthExecutionInstanceHandleV2 ** out_instance);
+void tiforth_execution_host_v2_drive_input_batch(
+    TiforthExecutionInstanceHandleV2 * instance,
+    uint32_t input_id,
+    const TiforthBatchViewV2 * input,
+    TiforthStatusV2 * out_status,
+    TiforthBatchViewV2 * out_output);
+void tiforth_execution_host_v2_drive_end_of_input(
+    TiforthExecutionInstanceHandleV2 * instance,
+    uint32_t input_id,
+    TiforthStatusV2 * out_status);
+void tiforth_execution_host_v2_drive_end_of_input_with_output(
+    TiforthExecutionInstanceHandleV2 * instance,
+    uint32_t input_id,
+    TiforthStatusV2 * out_status,
+    TiforthBatchViewV2 * out_output);
+void tiforth_execution_host_v2_continue_output(
+    TiforthExecutionInstanceHandleV2 * instance,
+    TiforthStatusV2 * out_status,
+    TiforthBatchViewV2 * out_output);
+void tiforth_execution_host_v2_finish(
+    TiforthExecutionInstanceHandleV2 * instance,
+    TiforthStatusV2 * out_status);
+void tiforth_execution_host_v2_release_executable(TiforthExecutionExecutableHandleV2 * executable);
+void tiforth_execution_host_v2_release_instance(TiforthExecutionInstanceHandleV2 * instance);
+}
+
 struct TiforthExecutionHostV2Api
 {
     using BuildFn = void (*) (
@@ -133,7 +167,6 @@ struct TiforthExecutionHostV2Api
     using ReleaseExecutableFn = void (*) (TiforthExecutionExecutableHandleV2 *);
     using ReleaseInstanceFn = void (*) (TiforthExecutionInstanceHandleV2 *);
 
-    void * library_handle = nullptr;
     BuildFn build = nullptr;
     OpenFn open = nullptr;
     DriveInputBatchFn drive_input_batch = nullptr;
@@ -143,115 +176,29 @@ struct TiforthExecutionHostV2Api
     FinishFn finish = nullptr;
     ReleaseExecutableFn release_executable = nullptr;
     ReleaseInstanceFn release_instance = nullptr;
-
-    TiforthExecutionHostV2Api() = default;
-    TiforthExecutionHostV2Api(const TiforthExecutionHostV2Api &) = delete;
-    TiforthExecutionHostV2Api & operator=(const TiforthExecutionHostV2Api &) = delete;
-
-    TiforthExecutionHostV2Api(TiforthExecutionHostV2Api && other) noexcept { *this = std::move(other); }
-
-    TiforthExecutionHostV2Api & operator=(TiforthExecutionHostV2Api && other) noexcept
-    {
-        if (this == &other)
-            return *this;
-        close();
-        library_handle = other.library_handle;
-        build = other.build;
-        open = other.open;
-        drive_input_batch = other.drive_input_batch;
-        drive_end_of_input = other.drive_end_of_input;
-        drive_end_of_input_with_output = other.drive_end_of_input_with_output;
-        continue_output = other.continue_output;
-        finish = other.finish;
-        release_executable = other.release_executable;
-        release_instance = other.release_instance;
-
-        other.library_handle = nullptr;
-        other.build = nullptr;
-        other.open = nullptr;
-        other.drive_input_batch = nullptr;
-        other.drive_end_of_input = nullptr;
-        other.drive_end_of_input_with_output = nullptr;
-        other.continue_output = nullptr;
-        other.finish = nullptr;
-        other.release_executable = nullptr;
-        other.release_instance = nullptr;
-        return *this;
-    }
-
-    ~TiforthExecutionHostV2Api() { close(); }
-
-    void close()
-    {
-        if (library_handle != nullptr)
-        {
-            dlclose(library_handle);
-            library_handle = nullptr;
-        }
-    }
 };
 
-template <typename Fn>
-bool loadSymbol(void * library, const char * name, Fn & fn, String & error)
+std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error)
 {
-    dlerror();
-    auto * raw = dlsym(library, name);
-    const char * symbol_error = dlerror();
-    if (symbol_error != nullptr)
-    {
-        error = fmt::format("failed to load symbol {}: {}", name, symbol_error);
-        return false;
-    }
-    fn = reinterpret_cast<Fn>(raw);
-    return true;
-}
-
-std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(const String & library_path, String & error)
-{
-    dlerror();
-    auto * handle = dlopen(library_path.c_str(), RTLD_NOW | RTLD_LOCAL);
-    if (handle == nullptr)
-    {
-        const char * open_error = dlerror();
-        error = fmt::format(
-            "failed to open tiforth execution host-v2 library at {}: {}",
-            library_path,
-            open_error != nullptr ? open_error : "unknown error");
-        return std::nullopt;
-    }
-
+#if defined(TIFORTH_HOST_V2_LINKED_TESTS)
+    (void)error;
     TiforthExecutionHostV2Api api;
-    api.library_handle = handle;
-    if (!loadSymbol(handle, "tiforth_execution_host_v2_build", api.build, error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_open", api.open, error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_drive_input_batch", api.drive_input_batch, error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_drive_end_of_input", api.drive_end_of_input, error)
-        || !loadSymbol(
-            handle,
-            "tiforth_execution_host_v2_drive_end_of_input_with_output",
-            api.drive_end_of_input_with_output,
-            error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_continue_output", api.continue_output, error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_finish", api.finish, error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_release_executable", api.release_executable, error)
-        || !loadSymbol(handle, "tiforth_execution_host_v2_release_instance", api.release_instance, error))
-    {
-        api.close();
-        return std::nullopt;
-    }
+    api.build = tiforth_execution_host_v2_build;
+    api.open = tiforth_execution_host_v2_open;
+    api.drive_input_batch = tiforth_execution_host_v2_drive_input_batch;
+    api.drive_end_of_input = tiforth_execution_host_v2_drive_end_of_input;
+    api.drive_end_of_input_with_output = tiforth_execution_host_v2_drive_end_of_input_with_output;
+    api.continue_output = tiforth_execution_host_v2_continue_output;
+    api.finish = tiforth_execution_host_v2_finish;
+    api.release_executable = tiforth_execution_host_v2_release_executable;
+    api.release_instance = tiforth_execution_host_v2_release_instance;
     return api;
-}
-
-std::optional<String> resolveExecutionHostV2LibraryPath()
-{
-    if (const char * configured = std::getenv("TIFORTH_FFI_C_DYLIB"); configured != nullptr)
-    {
-        if (std::filesystem::exists(configured))
-            return String(configured);
-        return std::nullopt;
-    }
-
+#else
+    error
+        = "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON "
+          "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> to run this donor adapter test";
     return std::nullopt;
+#endif
 }
 
 bool requiresStrictRuntimeExecution()
@@ -1029,19 +976,8 @@ public:
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerialAndParallel)
 {
     const bool strict_runtime_execution = requiresStrictRuntimeExecution();
-    auto maybe_library = resolveExecutionHostV2LibraryPath();
-    if (!maybe_library.has_value())
-    {
-        const String message
-            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
-        if (strict_runtime_execution)
-            GTEST_FAIL() << message;
-        SUCCEED() << message;
-        return;
-    }
-
     String load_error;
-    auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
+    auto maybe_api = loadExecutionHostV2Api(load_error);
     if (!maybe_api.has_value())
     {
         if (strict_runtime_execution)
@@ -1078,19 +1014,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
 {
     const bool strict_runtime_execution = requiresStrictRuntimeExecution();
-    auto maybe_library = resolveExecutionHostV2LibraryPath();
-    if (!maybe_library.has_value())
-    {
-        const String message
-            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
-        if (strict_runtime_execution)
-            GTEST_FAIL() << message;
-        SUCCEED() << message;
-        return;
-    }
-
     String load_error;
-    auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
+    auto maybe_api = loadExecutionHostV2Api(load_error);
     if (!maybe_api.has_value())
     {
         if (strict_runtime_execution)
@@ -1127,19 +1052,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParitySerialAndParallel)
 {
     const bool strict_runtime_execution = requiresStrictRuntimeExecution();
-    auto maybe_library = resolveExecutionHostV2LibraryPath();
-    if (!maybe_library.has_value())
-    {
-        const String message
-            = "set TIFORTH_FFI_C_DYLIB to a built tiforth ffi/c shared library to run this donor adapter test";
-        if (strict_runtime_execution)
-            GTEST_FAIL() << message;
-        SUCCEED() << message;
-        return;
-    }
-
     String load_error;
-    auto maybe_api = loadExecutionHostV2Api(maybe_library.value(), load_error);
+    auto maybe_api = loadExecutionHostV2Api(load_error);
     if (!maybe_api.has_value())
     {
         if (strict_runtime_execution)

@@ -337,6 +337,16 @@ if (ENABLE_TESTS)
         file(GLOB_RECURSE "${DST_VAR}" RELATIVE "${BASE_DIR}" "bench*.cpp")
     endmacro()
 
+    option(
+        ENABLE_TIFORTH_HOST_V2_LINKED_TESTS
+        "Enable TiForth host-v2 donor adapter gtests via compile/link-time dependency instead of runtime symbol loading"
+        OFF)
+    set(
+        TIFORTH_FFI_C_LIBRARY
+        ""
+        CACHE FILEPATH
+              "Absolute path to libtiforth_ffi_c shared library used by TiForth host-v2 linked donor adapter gtests")
+
     # attach all dbms gtest sources
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
     add_executable(gtests_dbms EXCLUDE_FROM_ALL
@@ -352,6 +362,22 @@ if (ENABLE_TESTS)
     target_compile_definitions(dbms PUBLIC MULTIPLE_CONTEXT_GTEST)
 
     target_link_libraries(gtests_dbms test_util_gtest_main tiflash_functions tiflash-dttool-lib delta_merge kvstore)
+    if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
+        if ("${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
+            message(
+                FATAL_ERROR
+                    "ENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON requires "
+                    "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib>")
+        endif ()
+        if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
+            message(
+                FATAL_ERROR
+                    "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
+        endif ()
+
+        target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
+        target_link_libraries(gtests_dbms "${TIFORTH_FFI_C_LIBRARY}")
+    endif ()
 
     install (TARGETS gtests_dbms
             COMPONENT tiflash-gtest
