@@ -533,6 +533,74 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityHighPartitionRetainable)
+{
+    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
+    String load_error;
+    auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
+    if (!maybe_api.has_value())
+    {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
+        SUCCEED() << load_error;
+        return;
+    }
+
+    auto api = std::move(maybe_api.value());
+
+    auto donor_serial = runDonorNativeBuildOuterJoin(1);
+    auto donor_parallel = runDonorNativeBuildOuterJoin(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    const std::vector<Tiforth::Int64Int64Row> build_rows = {
+        {1, 10},
+        {1, 11},
+        {5, 50},
+        {7, 70},
+    };
+    const std::vector<Tiforth::Int64Int64Row> probe_rows = {
+        {1, 100},
+        {5, 500},
+    };
+
+    auto adapter_serial_many_partitions = Tiforth::runJoinInt64KeyInt64Payload(
+        api,
+        Tiforth::PLAN_KIND_BUILD_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD,
+        build_rows,
+        probe_rows,
+        8,
+        Tiforth::BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        0,
+        0,
+        0);
+    auto adapter_parallel_many_partitions = Tiforth::runJoinInt64KeyInt64Payload(
+        api,
+        Tiforth::PLAN_KIND_BUILD_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD,
+        build_rows,
+        probe_rows,
+        8,
+        Tiforth::BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        0,
+        0,
+        0);
+
+    ASSERT_EQ(adapter_serial_many_partitions.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel_many_partitions.warning_count, donor_serial.warning_count);
+
+    ASSERT_EQ(adapter_serial_many_partitions.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel_many_partitions.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-build-outer-join-partitions] serial=8 warnings="
+              << adapter_serial_many_partitions.warning_count
+              << " rows=" << adapter_serial_many_partitions.rows.size() << " parallel=8 warnings="
+              << adapter_parallel_many_partitions.warning_count
+              << " rows=" << adapter_parallel_many_partitions.rows.size()
+              << " donor_warnings=" << donor_serial.warning_count << " donor_rows=" << donor_serial.rows.size()
+              << " parity=ok" << std::endl;
+}
+
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityLegacyBuildEndSplitOutput)
 {
     const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
@@ -668,6 +736,75 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityS
               << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
               << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
+}
+
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityHighPartitionRetainable)
+{
+    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
+    String load_error;
+    auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
+    if (!maybe_api.has_value())
+    {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
+        SUCCEED() << load_error;
+        return;
+    }
+
+    auto api = std::move(maybe_api.value());
+
+    auto donor_serial = runDonorNativeProbeOuterJoin(1);
+    auto donor_parallel = runDonorNativeProbeOuterJoin(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    const std::vector<Tiforth::Int64Int64Row> build_rows = {
+        {1, 10},
+        {1, 11},
+        {5, 50},
+    };
+    const std::vector<Tiforth::Int64Int64Row> probe_rows = {
+        {1, 100},
+        {2, 200},
+        {std::nullopt, 300},
+        {5, 500},
+    };
+
+    auto adapter_serial_many_partitions = Tiforth::runJoinInt64KeyInt64Payload(
+        api,
+        Tiforth::PLAN_KIND_PROBE_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD,
+        build_rows,
+        probe_rows,
+        8,
+        Tiforth::BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        0,
+        0,
+        0);
+    auto adapter_parallel_many_partitions = Tiforth::runJoinInt64KeyInt64Payload(
+        api,
+        Tiforth::PLAN_KIND_PROBE_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD,
+        build_rows,
+        probe_rows,
+        8,
+        Tiforth::BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        0,
+        0,
+        0);
+
+    ASSERT_EQ(adapter_serial_many_partitions.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel_many_partitions.warning_count, donor_serial.warning_count);
+
+    ASSERT_EQ(adapter_serial_many_partitions.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel_many_partitions.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-probe-outer-join-partitions] serial=8 warnings="
+              << adapter_serial_many_partitions.warning_count
+              << " rows=" << adapter_serial_many_partitions.rows.size() << " parallel=8 warnings="
+              << adapter_parallel_many_partitions.warning_count
+              << " rows=" << adapter_parallel_many_partitions.rows.size()
+              << " donor_warnings=" << donor_serial.warning_count << " donor_rows=" << donor_serial.rows.size()
+              << " parity=ok" << std::endl;
 }
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityLegacyProbeEndSplitOutput)
