@@ -674,7 +674,15 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     const size_t partition_count = std::max<size_t>(1, partitions);
     std::vector<Utf8Int64JoinBatchOwned> retained_batches;
     if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
-        retained_batches.reserve(8);
+    {
+        const auto batches_for_rows = [&](size_t row_count) {
+            if (row_count == 0)
+                return size_t{0};
+            const size_t chunk_size = std::max<size_t>(1, (row_count + partition_count - 1) / partition_count);
+            return (row_count + chunk_size - 1) / chunk_size;
+        };
+        retained_batches.reserve(batches_for_rows(build_rows.size()) + batches_for_rows(probe_rows.size()));
+    }
 
     auto drive_input_rows = [&](const std::vector<Utf8Int64Row> & rows, uint32_t input_id) {
         const size_t chunk_size = std::max<size_t>(1, (rows.size() + partition_count - 1) / partition_count);
@@ -763,7 +771,15 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     const size_t partition_count = std::max<size_t>(1, partitions);
     std::vector<Int64Int64JoinBatchOwned> retained_batches;
     if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
-        retained_batches.reserve(8);
+    {
+        const auto batches_for_rows = [&](size_t row_count) {
+            if (row_count == 0)
+                return size_t{0};
+            const size_t chunk_size = std::max<size_t>(1, (row_count + partition_count - 1) / partition_count);
+            return (row_count + chunk_size - 1) / chunk_size;
+        };
+        retained_batches.reserve(batches_for_rows(build_rows.size()) + batches_for_rows(probe_rows.size()));
+    }
 
     auto drive_input_rows = [&](const std::vector<Int64Int64Row> & rows, uint32_t input_id) {
         const size_t chunk_size = std::max<size_t>(1, (rows.size() + partition_count - 1) / partition_count);
