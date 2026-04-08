@@ -186,7 +186,8 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     uint32_t session_charset,
     uint32_t default_collation,
     uint32_t max_block_size = 0,
-    bool build_end_with_output = true);
+    bool build_end_with_output = true,
+    bool probe_end_with_output = true);
 
 JoinRunResult runJoinInt64KeyInt64Payload(
     const TiforthExecutionHostV2Api & api,
@@ -199,7 +200,8 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     uint32_t session_charset,
     uint32_t default_collation,
     uint32_t max_block_size = 0,
-    bool build_end_with_output = true);
+    bool build_end_with_output = true,
+    bool probe_end_with_output = true);
 
 std::vector<JoinOutputRow> canonicalizeJoinRows(std::vector<JoinOutputRow> rows);
 
