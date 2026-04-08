@@ -652,7 +652,8 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     uint32_t ownership_mode,
     uint32_t ambient_requirement_mask,
     uint32_t session_charset,
-    uint32_t default_collation)
+    uint32_t default_collation,
+    uint32_t max_block_size)
 {
     TiforthExecutionBuildRequestV2 build_request{};
     build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -665,7 +666,7 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     build_request.decimal_precision = 0;
     build_request.decimal_scale_is_set = false;
     build_request.decimal_scale = 0;
-    build_request.max_block_size = 0;
+    build_request.max_block_size = max_block_size;
 
     ExecutionHandles handles(api);
     TiforthExecutionInstanceHandleV2 * instance = handles.buildAndOpen(build_request);
@@ -749,7 +750,8 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     uint32_t ownership_mode,
     uint32_t ambient_requirement_mask,
     uint32_t session_charset,
-    uint32_t default_collation)
+    uint32_t default_collation,
+    uint32_t max_block_size)
 {
     TiforthExecutionBuildRequestV2 build_request{};
     build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -762,7 +764,7 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     build_request.decimal_precision = 0;
     build_request.decimal_scale_is_set = false;
     build_request.decimal_scale = 0;
-    build_request.max_block_size = 0;
+    build_request.max_block_size = max_block_size;
 
     ExecutionHandles handles(api);
     TiforthExecutionInstanceHandleV2 * instance = handles.buildAndOpen(build_request);

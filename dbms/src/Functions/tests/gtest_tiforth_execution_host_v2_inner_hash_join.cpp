@@ -325,6 +325,75 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityHighPa
               << " parity=ok" << std::endl;
 }
 
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySplitOutputSerialAndParallel)
+{
+    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
+    String load_error;
+    auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
+    if (!maybe_api.has_value())
+    {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
+        SUCCEED() << load_error;
+        return;
+    }
+
+    auto api = std::move(maybe_api.value());
+
+    auto donor_serial = runDonorNativeInnerJoin(1);
+    auto donor_parallel = runDonorNativeInnerJoin(2);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    const std::vector<Tiforth::Utf8Int64Row> build_rows = {
+        {String("k"), 10},
+        {String("k"), 20},
+        {String("x"), 30},
+        {std::nullopt, 40},
+    };
+    const std::vector<Tiforth::Utf8Int64Row> probe_rows = {
+        {String("k"), 100},
+        {String("x"), 200},
+        {String("z"), 300},
+        {std::nullopt, 400},
+    };
+
+    auto adapter_serial = Tiforth::runJoinUtf8KeyInt64Payload(
+        api,
+        Tiforth::PLAN_KIND_INNER_HASH_JOIN_UTF8_KEY_INT64_PAYLOAD,
+        build_rows,
+        probe_rows,
+        1,
+        Tiforth::BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        Tiforth::AMBIENT_REQUIREMENT_CHARSET | Tiforth::AMBIENT_REQUIREMENT_DEFAULT_COLLATION,
+        Tiforth::SESSION_CHARSET_UTF8MB4,
+        Tiforth::DEFAULT_COLLATION_UTF8MB4_BIN,
+        1);
+    auto adapter_parallel = Tiforth::runJoinUtf8KeyInt64Payload(
+        api,
+        Tiforth::PLAN_KIND_INNER_HASH_JOIN_UTF8_KEY_INT64_PAYLOAD,
+        build_rows,
+        probe_rows,
+        2,
+        Tiforth::BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        Tiforth::AMBIENT_REQUIREMENT_CHARSET | Tiforth::AMBIENT_REQUIREMENT_DEFAULT_COLLATION,
+        Tiforth::SESSION_CHARSET_UTF8MB4,
+        Tiforth::DEFAULT_COLLATION_UTF8MB4_BIN,
+        1);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-inner-join-split-output] serial=1 warnings=" << adapter_serial.warning_count
+              << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
+              << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
+              << " donor_rows=" << donor_serial.rows.size() << " max_block_size=1 parity=ok" << std::endl;
+}
+
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
 {
     const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
