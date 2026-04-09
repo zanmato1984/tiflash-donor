@@ -652,11 +652,56 @@ CastRunResult runCastUtf8ToDecimal(
     return result;
 }
 
+template <typename Row, typename BatchOwned>
+JoinRunResult runJoinKeyInt64Payload(
+    const TiforthExecutionHostV2Api & api,
+    uint32_t plan_kind,
+    const std::vector<Row> & build_rows,
+    const std::vector<Row> & probe_rows,
+    size_t partitions,
+    uint32_t ownership_mode,
+    uint32_t ambient_requirement_mask,
+    uint32_t session_charset,
+    uint32_t default_collation,
+    uint32_t max_block_size,
+    bool build_end_with_output,
+    bool probe_end_with_output);
+
 JoinRunResult runJoinUtf8KeyInt64Payload(
     const TiforthExecutionHostV2Api & api,
     uint32_t plan_kind,
     const std::vector<Utf8Int64Row> & build_rows,
     const std::vector<Utf8Int64Row> & probe_rows,
+    size_t partitions,
+    uint32_t ownership_mode,
+    uint32_t ambient_requirement_mask,
+    uint32_t session_charset,
+    uint32_t default_collation,
+    uint32_t max_block_size,
+    bool build_end_with_output,
+    bool probe_end_with_output)
+{
+    return runJoinKeyInt64Payload<Utf8Int64Row, Utf8Int64JoinBatchOwned>(
+        api,
+        plan_kind,
+        build_rows,
+        probe_rows,
+        partitions,
+        ownership_mode,
+        ambient_requirement_mask,
+        session_charset,
+        default_collation,
+        max_block_size,
+        build_end_with_output,
+        probe_end_with_output);
+}
+
+template <typename Row, typename BatchOwned>
+JoinRunResult runJoinKeyInt64Payload(
+    const TiforthExecutionHostV2Api & api,
+    uint32_t plan_kind,
+    const std::vector<Row> & build_rows,
+    const std::vector<Row> & probe_rows,
     size_t partitions,
     uint32_t ownership_mode,
     uint32_t ambient_requirement_mask,
@@ -684,7 +729,7 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
 
     JoinRunResult result;
     const size_t partition_count = std::max<size_t>(1, partitions);
-    std::vector<Utf8Int64JoinBatchOwned> retained_batches;
+    std::vector<BatchOwned> retained_batches;
     if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
     {
         const auto batches_for_rows = [&](size_t row_count) {
@@ -696,13 +741,13 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
         retained_batches.reserve(batches_for_rows(build_rows.size()) + batches_for_rows(probe_rows.size()));
     }
 
-    auto drive_input_rows = [&](const std::vector<Utf8Int64Row> & rows, uint32_t input_id) {
+    auto drive_input_rows = [&](const std::vector<Row> & rows, uint32_t input_id) {
         const size_t chunk_size = std::max<size_t>(1, (rows.size() + partition_count - 1) / partition_count);
         for (size_t start = 0; start < rows.size(); start += chunk_size)
         {
             const size_t end = std::min(rows.size(), start + chunk_size);
             const TiforthBatchViewV2 * input_batch = nullptr;
-            std::optional<Utf8Int64JoinBatchOwned> borrowed_batch;
+            std::optional<BatchOwned> borrowed_batch;
             if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
             {
                 retained_batches.emplace_back(rows, start, end, ownership_mode);
@@ -786,110 +831,19 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     bool build_end_with_output,
     bool probe_end_with_output)
 {
-    TiforthExecutionBuildRequestV2 build_request{};
-    build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-    build_request.plan_kind = plan_kind;
-    build_request.ambient_requirement_mask = ambient_requirement_mask;
-    build_request.sql_mode = 0;
-    build_request.session_charset = session_charset;
-    build_request.default_collation = default_collation;
-    build_request.decimal_precision_is_set = false;
-    build_request.decimal_precision = 0;
-    build_request.decimal_scale_is_set = false;
-    build_request.decimal_scale = 0;
-    build_request.max_block_size = max_block_size;
-
-    ExecutionHandles handles(api);
-    TiforthExecutionInstanceHandleV2 * instance = handles.buildAndOpen(build_request);
-
-    JoinRunResult result;
-    const size_t partition_count = std::max<size_t>(1, partitions);
-    std::vector<Int64Int64JoinBatchOwned> retained_batches;
-    if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
-    {
-        const auto batches_for_rows = [&](size_t row_count) {
-            if (row_count == 0)
-                return size_t{0};
-            const size_t chunk_size = std::max<size_t>(1, (row_count + partition_count - 1) / partition_count);
-            return (row_count + chunk_size - 1) / chunk_size;
-        };
-        retained_batches.reserve(batches_for_rows(build_rows.size()) + batches_for_rows(probe_rows.size()));
-    }
-
-    auto drive_input_rows = [&](const std::vector<Int64Int64Row> & rows, uint32_t input_id) {
-        const size_t chunk_size = std::max<size_t>(1, (rows.size() + partition_count - 1) / partition_count);
-        for (size_t start = 0; start < rows.size(); start += chunk_size)
-        {
-            const size_t end = std::min(rows.size(), start + chunk_size);
-            const TiforthBatchViewV2 * input_batch = nullptr;
-            std::optional<Int64Int64JoinBatchOwned> borrowed_batch;
-            if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
-            {
-                retained_batches.emplace_back(rows, start, end, ownership_mode);
-                input_batch = &retained_batches.back().batch;
-            }
-            else
-            {
-                borrowed_batch.emplace(rows, start, end, ownership_mode);
-                input_batch = &borrowed_batch->batch;
-            }
-
-            auto status = makeStatus();
-            auto output = makeBatch();
-            api.drive_input_batch(instance, input_id, input_batch, &status, &output);
-            ensureStatusKindOk("drive_input_batch", status);
-            result.warning_count += status.warning_count;
-            appendJoinOutputRows(output, result.rows);
-            drainJoinOutput(api, instance, status, result);
-        }
-    };
-
-    drive_input_rows(build_rows, INPUT_ID_BUILD);
-
-    auto status = makeStatus();
-    if (build_end_with_output)
-    {
-        auto output = makeBatch();
-        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &output);
-        ensureStatusKindOk("drive_end_of_input_with_output(build)", status);
-        result.warning_count += status.warning_count;
-        appendJoinOutputRows(output, result.rows);
-        drainJoinOutput(api, instance, status, result);
-    }
-    else
-    {
-        api.drive_end_of_input(instance, INPUT_ID_BUILD, &status);
-        ensureStatusKindOk("drive_end_of_input(build)", status);
-        result.warning_count += status.warning_count;
-        drainJoinOutput(api, instance, status, result);
-    }
-
-    drive_input_rows(probe_rows, INPUT_ID_PROBE);
-
-    status = makeStatus();
-    if (probe_end_with_output)
-    {
-        auto output = makeBatch();
-        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &output);
-        ensureStatusKindOk("drive_end_of_input_with_output(probe)", status);
-        result.warning_count += status.warning_count;
-        appendJoinOutputRows(output, result.rows);
-        drainJoinOutput(api, instance, status, result);
-    }
-    else
-    {
-        api.drive_end_of_input(instance, INPUT_ID_PROBE, &status);
-        ensureStatusKindOk("drive_end_of_input(probe)", status);
-        result.warning_count += status.warning_count;
-        drainJoinOutput(api, instance, status, result);
-    }
-
-    status = makeStatus();
-    api.finish(instance, &status);
-    ensureStatusOk("finish", status);
-
-    result.rows = canonicalizeJoinRows(std::move(result.rows));
-    return result;
+    return runJoinKeyInt64Payload<Int64Int64Row, Int64Int64JoinBatchOwned>(
+        api,
+        plan_kind,
+        build_rows,
+        probe_rows,
+        partitions,
+        ownership_mode,
+        ambient_requirement_mask,
+        session_charset,
+        default_collation,
+        max_block_size,
+        build_end_with_output,
+        probe_end_with_output);
 }
 
 std::vector<JoinOutputRow> canonicalizeJoinRows(std::vector<JoinOutputRow> rows)
