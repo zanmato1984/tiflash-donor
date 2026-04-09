@@ -44,15 +44,13 @@ cmake --build /tmp/tiflash-linked-host-v2 --target gtests_dbms
 ```bash
 TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 \
 ctest --test-dir /tmp/tiflash-linked-host-v2 \
-  -R TestTiforthExecutionHostV2 \
+  -R TestTiforthExecutionHostV2LinkedStrict \
   --output-on-failure
 ```
 
-If your local CTest registration is incomplete, run the proving slices
-directly from `gtests_dbms`:
+The strict CTest entry runs this exact proving-slice gtest filter:
 
 ```bash
-TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 \
 /tmp/tiflash-linked-host-v2/dbms/gtests_dbms \
   --gtest_filter='TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*'
 ```

@@ -492,7 +492,16 @@ if (ENABLE_TESTS)
             STATUS
                 "TiForth host-v2 linked donor adapter strict run: "
                 "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 ctest --test-dir ${CMAKE_BINARY_DIR} "
-                "-R TestTiforthExecutionHostV2 --output-on-failure")
+                "-R TestTiforthExecutionHostV2LinkedStrict --output-on-failure")
+        add_test(
+            NAME TestTiforthExecutionHostV2LinkedStrict
+            COMMAND $<TARGET_FILE:gtests_dbms>
+                --gtest_filter=TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*)
+        set_tests_properties(
+            TestTiforthExecutionHostV2LinkedStrict
+            PROPERTIES
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+                ENVIRONMENT "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1")
         if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
             set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
             set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
