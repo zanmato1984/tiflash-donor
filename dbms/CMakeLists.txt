@@ -121,6 +121,15 @@ check_then_add_sources_compile_flag (
     src/Storages/DeltaMerge/DMVersionFilterBlockInputStream.cpp
 )
 
+# Apple clang 17 can report loop-vectorize transform failures in
+# DataTypeString.cpp; keep this source buildable under global -Werror.
+check_cxx_compiler_flag("-Wno-error=pass-failed" COMPILER_SUPPORT_NO_ERROR_PASS_FAILED)
+check_then_add_sources_compile_flag (
+    COMPILER_SUPPORT_NO_ERROR_PASS_FAILED
+    "-Wno-error=pass-failed"
+    src/DataTypes/DataTypeString.cpp
+)
+
 list (APPEND tiflash_common_io_sources ${CONFIG_BUILD})
 list (APPEND tiflash_common_io_headers ${CONFIG_VERSION} ${CONFIG_COMMON})
 list (APPEND tiflash_common_io_headers ${fiu_include_dirs})
@@ -384,7 +393,11 @@ if (ENABLE_TESTS)
         add_executable(
             gtests_tiforth_execution_host_v2
             EXCLUDE_FROM_ALL
-            ${_tiforth_host_v2_gtest_sources})
+            ${_tiforth_host_v2_gtest_sources}
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/UserConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/RaftConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/AggregateFunctions/AggregateFunctionSum.cpp)
         target_include_directories(gtests_tiforth_execution_host_v2 BEFORE PRIVATE ${SPARCEHASH_INCLUDE_DIR})
         target_compile_definitions(gtests_tiforth_execution_host_v2 PUBLIC DBMS_PUBLIC_GTEST)
 
@@ -497,6 +510,9 @@ if (ENABLE_TESTS)
             gtests_tiforth_execution_host_v2
             test_util_gtest_main
             tiflash_functions
+            tiflash-dttool-lib
+            delta_merge
+            kvstore
             "${_tiforth_ffi_c_link_target}")
         message(
             STATUS

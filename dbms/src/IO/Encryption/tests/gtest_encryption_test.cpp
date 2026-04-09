@@ -158,7 +158,7 @@ INSTANTIATE_TEST_CASE_P(
 #if USE_GM_SSL
             ,
             EncryptionMethod::SM4Ctr
-#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4)
+#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4) || defined(OPENSSL_IS_BORINGSSL)
 // not support SM4
 #else
             // Openssl support SM4 after 1.1.1 release version.

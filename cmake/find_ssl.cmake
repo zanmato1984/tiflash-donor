@@ -79,6 +79,12 @@ if(OPENSSL_FOUND)
     set(USE_SSL 1)
 endif()
 
+# Internal boringssl builds do not provide SM4 entrypoints such as
+# EVP_sm4_ctr, so force the no-SM4 macro for consistent compile-time guards.
+if (USE_INTERNAL_SSL_LIBRARY AND NOT USE_GM_SSL)
+    add_definitions(-DOPENSSL_NO_SM4)
+endif ()
+
 # used by new poco
 # part from /usr/share/cmake-*/Modules/FindOpenSSL.cmake, with removed all "EXISTS "
 if(OPENSSL_FOUND AND NOT USE_INTERNAL_SSL_LIBRARY)
