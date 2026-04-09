@@ -493,6 +493,10 @@ if (ENABLE_TESTS)
                 "TiForth host-v2 linked donor adapter strict run: "
                 "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 ctest --test-dir ${CMAKE_BINARY_DIR} "
                 "-R TestTiforthExecutionHostV2LinkedStrict --output-on-failure")
+        message(
+            STATUS
+                "TiForth host-v2 linked donor adapter bootstrap: "
+                "./dbms/src/Functions/tests/bootstrap_tiforth_host_v2_linked_submodules.sh")
         add_test(
             NAME TestTiforthExecutionHostV2LinkedStrict
             COMMAND $<TARGET_FILE:gtests_dbms>

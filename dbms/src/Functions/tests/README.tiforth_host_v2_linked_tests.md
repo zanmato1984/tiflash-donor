@@ -10,6 +10,16 @@ Runtime symbol dispatch (`dlopen` / `dlsym`) is not used on this path.
 These host-v2 proving tests are compiled into `gtests_dbms` only when
 `-DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON` is set.
 
+## Bootstrap submodules (fresh donor worktree)
+
+Before running the linked host-v2 configure/build commands in a fresh worktree,
+initialize the required donor submodules (including nested dependencies used by
+`gtests_dbms`) with:
+
+```bash
+./dbms/src/Functions/tests/bootstrap_tiforth_host_v2_linked_submodules.sh
+```
+
 ## Configure
 
 Choose one linked-library input mode and keep the path absolute.
