@@ -5,7 +5,10 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "${repo_root}"
 
-git submodule update --init --recursive \
+# Keep bootstrap bounded to the linked host-v2 proving path. A full
+# --recursive walk pulls many unrelated nested deps (for example grpc/bloaty
+# trees), is slow on fresh worktrees, and can fail before reaching configure.
+git submodule update --init \
   contrib/abseil-cpp \
   contrib/aws \
   contrib/aws-c-auth \
@@ -47,3 +50,8 @@ git submodule update --init --recursive \
   contrib/xxHash \
   contrib/zlib-ng \
   contrib/zstd
+
+# Minimal nested submodules required by the linked host-v2 proving configure.
+# Keep this explicit instead of blanket recursion.
+git -C contrib/grpc submodule update --init third_party/cares/cares
+git -C contrib/prometheus-cpp submodule update --init 3rdparty/civetweb
