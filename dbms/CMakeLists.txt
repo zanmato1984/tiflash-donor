@@ -356,15 +356,17 @@ if (ENABLE_TESTS)
         "tiforth_ffi_c"
         CACHE STRING
               "Library name used with TIFORTH_FFI_C_LIB_DIR for TiForth host-v2 linked donor adapter gtests")
+    set(
+        _tiforth_host_v2_gtest_sources
+        ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_cast.cpp
+        ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_inner_hash_join.cpp)
 
     # attach all dbms gtest sources
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
-    if (NOT ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
-        list(
-            FILTER dbms_gtest_sources
-            EXCLUDE
-            REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
-    endif ()
+    list(
+        FILTER dbms_gtest_sources
+        EXCLUDE
+        REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
     add_executable(gtests_dbms EXCLUDE_FROM_ALL
         ${dbms_gtest_sources}
         ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
@@ -379,6 +381,13 @@ if (ENABLE_TESTS)
 
     target_link_libraries(gtests_dbms test_util_gtest_main tiflash_functions tiflash-dttool-lib delta_merge kvstore)
     if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
+        add_executable(
+            gtests_tiforth_execution_host_v2
+            EXCLUDE_FROM_ALL
+            ${_tiforth_host_v2_gtest_sources})
+        target_include_directories(gtests_tiforth_execution_host_v2 BEFORE PRIVATE ${SPARCEHASH_INCLUDE_DIR})
+        target_compile_definitions(gtests_tiforth_execution_host_v2 PUBLIC DBMS_PUBLIC_GTEST)
+
         set(_tiforth_ffi_c_link_target "")
         set(_tiforth_ffi_c_rpath_dir "")
         if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "" AND NOT "${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
@@ -483,11 +492,15 @@ if (ENABLE_TESTS)
             endif ()
         endforeach ()
 
-        target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
-        target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
+        target_compile_definitions(gtests_tiforth_execution_host_v2 PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
+        target_link_libraries(
+            gtests_tiforth_execution_host_v2
+            test_util_gtest_main
+            tiflash_functions
+            "${_tiforth_ffi_c_link_target}")
         message(
             STATUS
-                "TiForth host-v2 linked donor adapter tests: gtests_dbms links ${_tiforth_ffi_c_link_target}")
+                "TiForth host-v2 linked donor adapter tests: gtests_tiforth_execution_host_v2 links ${_tiforth_ffi_c_link_target}")
         message(
             STATUS
                 "TiForth host-v2 linked donor adapter strict run: "
@@ -499,7 +512,7 @@ if (ENABLE_TESTS)
                 "./dbms/src/Functions/tests/bootstrap_tiforth_host_v2_linked_submodules.sh")
         add_test(
             NAME TestTiforthExecutionHostV2LinkedStrict
-            COMMAND $<TARGET_FILE:gtests_dbms>
+            COMMAND $<TARGET_FILE:gtests_tiforth_execution_host_v2>
                 --gtest_filter=TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*)
         set_tests_properties(
             TestTiforthExecutionHostV2LinkedStrict
@@ -507,8 +520,16 @@ if (ENABLE_TESTS)
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
                 ENVIRONMENT "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1")
         if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
-            set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
-            set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
+            set_property(
+                TARGET gtests_tiforth_execution_host_v2
+                APPEND
+                PROPERTY BUILD_RPATH
+                         "${_tiforth_ffi_c_rpath_dir}")
+            set_property(
+                TARGET gtests_tiforth_execution_host_v2
+                APPEND
+                PROPERTY INSTALL_RPATH
+                         "${_tiforth_ffi_c_rpath_dir}")
         endif ()
     endif ()
 
@@ -534,6 +555,13 @@ if (ENABLE_TESTS)
     if (USE_GM_SSL)
         target_link_libraries(gtests_dbms gmssl)
         target_include_directories(gtests_dbms PRIVATE ${TiFlash_SOURCE_DIR}/contrib/GmSSL/include)
+        if (TARGET gtests_tiforth_execution_host_v2)
+            target_link_libraries(gtests_tiforth_execution_host_v2 gmssl)
+            target_include_directories(
+                gtests_tiforth_execution_host_v2
+                PRIVATE
+                    ${TiFlash_SOURCE_DIR}/contrib/GmSSL/include)
+        endif ()
         install (TARGETS gmssl
                 COMPONENT tiflash-gtest
                 DESTINATION ".")
@@ -547,6 +575,10 @@ if (ENABLE_TESTS)
 
     set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "$ORIGIN/")
     set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "$ORIGIN/")
+    if (TARGET gtests_tiforth_execution_host_v2)
+        set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY BUILD_RPATH "$ORIGIN/")
+        set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY INSTALL_RPATH "$ORIGIN/")
+    endif ()
 
     if (ENABLE_CLARA)
         install (SCRIPT ${TiFlash_SOURCE_DIR}/libs/libclara-cmake/linux_post_install.cmake COMPONENT tiflash-gtest)
@@ -554,8 +586,19 @@ if (ENABLE_TESTS)
 
     target_compile_options(gtests_dbms PRIVATE -Wno-unknown-pragmas -Wno-deprecated-copy)
     add_check(gtests_dbms)
+    if (TARGET gtests_tiforth_execution_host_v2)
+        target_compile_options(
+            gtests_tiforth_execution_host_v2
+            PRIVATE
+                -Wno-unknown-pragmas
+                -Wno-deprecated-copy)
+        add_check(gtests_tiforth_execution_host_v2)
+    endif ()
 
     add_target_pch("pch-dbms.h" gtests_dbms)
+    if (TARGET gtests_tiforth_execution_host_v2)
+        add_target_pch("pch-dbms.h" gtests_tiforth_execution_host_v2)
+    endif ()
     grep_bench_sources(${TiFlash_SOURCE_DIR}/dbms dbms_bench_sources)
     add_executable(bench_dbms EXCLUDE_FROM_ALL
         ${dbms_bench_sources}
