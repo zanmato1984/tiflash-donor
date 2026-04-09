@@ -641,7 +641,10 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     uint32_t ownership_mode,
     uint32_t ambient_requirement_mask,
     uint32_t session_charset,
-    uint32_t default_collation)
+    uint32_t default_collation,
+    uint32_t max_block_size,
+    bool build_end_with_output,
+    bool probe_end_with_output)
 {
     TiforthExecutionBuildRequestV2 build_request{};
     build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -654,7 +657,7 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     build_request.decimal_precision = 0;
     build_request.decimal_scale_is_set = false;
     build_request.decimal_scale = 0;
-    build_request.max_block_size = 0;
+    build_request.max_block_size = max_block_size;
 
     ExecutionHandles handles(api);
     TiforthExecutionInstanceHandleV2 * instance = handles.buildAndOpen(build_request);
@@ -700,22 +703,42 @@ JoinRunResult runJoinUtf8KeyInt64Payload(
     drive_input_rows(build_rows, INPUT_ID_BUILD);
 
     auto status = makeStatus();
-    auto output = makeBatch();
-    api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &output);
-    ensureStatusKindOk("drive_end_of_input_with_output(build)", status);
-    result.warning_count += status.warning_count;
-    appendJoinOutputRows(output, result.rows);
-    drainJoinOutput(api, instance, status, result);
+    if (build_end_with_output)
+    {
+        auto output = makeBatch();
+        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &output);
+        ensureStatusKindOk("drive_end_of_input_with_output(build)", status);
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(output, result.rows);
+        drainJoinOutput(api, instance, status, result);
+    }
+    else
+    {
+        api.drive_end_of_input(instance, INPUT_ID_BUILD, &status);
+        ensureStatusKindOk("drive_end_of_input(build)", status);
+        result.warning_count += status.warning_count;
+        drainJoinOutput(api, instance, status, result);
+    }
 
     drive_input_rows(probe_rows, INPUT_ID_PROBE);
 
     status = makeStatus();
-    output = makeBatch();
-    api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &output);
-    ensureStatusKindOk("drive_end_of_input_with_output(probe)", status);
-    result.warning_count += status.warning_count;
-    appendJoinOutputRows(output, result.rows);
-    drainJoinOutput(api, instance, status, result);
+    if (probe_end_with_output)
+    {
+        auto output = makeBatch();
+        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &output);
+        ensureStatusKindOk("drive_end_of_input_with_output(probe)", status);
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(output, result.rows);
+        drainJoinOutput(api, instance, status, result);
+    }
+    else
+    {
+        api.drive_end_of_input(instance, INPUT_ID_PROBE, &status);
+        ensureStatusKindOk("drive_end_of_input(probe)", status);
+        result.warning_count += status.warning_count;
+        drainJoinOutput(api, instance, status, result);
+    }
 
     status = makeStatus();
     api.finish(instance, &status);
@@ -734,7 +757,10 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     uint32_t ownership_mode,
     uint32_t ambient_requirement_mask,
     uint32_t session_charset,
-    uint32_t default_collation)
+    uint32_t default_collation,
+    uint32_t max_block_size,
+    bool build_end_with_output,
+    bool probe_end_with_output)
 {
     TiforthExecutionBuildRequestV2 build_request{};
     build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -747,7 +773,7 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     build_request.decimal_precision = 0;
     build_request.decimal_scale_is_set = false;
     build_request.decimal_scale = 0;
-    build_request.max_block_size = 0;
+    build_request.max_block_size = max_block_size;
 
     ExecutionHandles handles(api);
     TiforthExecutionInstanceHandleV2 * instance = handles.buildAndOpen(build_request);
@@ -793,22 +819,42 @@ JoinRunResult runJoinInt64KeyInt64Payload(
     drive_input_rows(build_rows, INPUT_ID_BUILD);
 
     auto status = makeStatus();
-    auto output = makeBatch();
-    api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &output);
-    ensureStatusKindOk("drive_end_of_input_with_output(build)", status);
-    result.warning_count += status.warning_count;
-    appendJoinOutputRows(output, result.rows);
-    drainJoinOutput(api, instance, status, result);
+    if (build_end_with_output)
+    {
+        auto output = makeBatch();
+        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &output);
+        ensureStatusKindOk("drive_end_of_input_with_output(build)", status);
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(output, result.rows);
+        drainJoinOutput(api, instance, status, result);
+    }
+    else
+    {
+        api.drive_end_of_input(instance, INPUT_ID_BUILD, &status);
+        ensureStatusKindOk("drive_end_of_input(build)", status);
+        result.warning_count += status.warning_count;
+        drainJoinOutput(api, instance, status, result);
+    }
 
     drive_input_rows(probe_rows, INPUT_ID_PROBE);
 
     status = makeStatus();
-    output = makeBatch();
-    api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &output);
-    ensureStatusKindOk("drive_end_of_input_with_output(probe)", status);
-    result.warning_count += status.warning_count;
-    appendJoinOutputRows(output, result.rows);
-    drainJoinOutput(api, instance, status, result);
+    if (probe_end_with_output)
+    {
+        auto output = makeBatch();
+        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &output);
+        ensureStatusKindOk("drive_end_of_input_with_output(probe)", status);
+        result.warning_count += status.warning_count;
+        appendJoinOutputRows(output, result.rows);
+        drainJoinOutput(api, instance, status, result);
+    }
+    else
+    {
+        api.drive_end_of_input(instance, INPUT_ID_PROBE, &status);
+        ensureStatusKindOk("drive_end_of_input(probe)", status);
+        result.warning_count += status.warning_count;
+        drainJoinOutput(api, instance, status, result);
+    }
 
     status = makeStatus();
     api.finish(instance, &status);
