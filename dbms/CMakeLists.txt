@@ -346,9 +346,25 @@ if (ENABLE_TESTS)
         ""
         CACHE FILEPATH
               "Absolute path to libtiforth_ffi_c shared library used by TiForth host-v2 linked donor adapter gtests")
+    set(
+        TIFORTH_FFI_C_LIB_DIR
+        ""
+        CACHE PATH
+              "Directory that contains libtiforth_ffi_c for TiForth host-v2 linked donor adapter gtests")
+    set(
+        TIFORTH_FFI_C_LIB_NAME
+        "tiforth_ffi_c"
+        CACHE STRING
+              "Library name used with TIFORTH_FFI_C_LIB_DIR for TiForth host-v2 linked donor adapter gtests")
 
     # attach all dbms gtest sources
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
+    if (NOT ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
+        list(
+            FILTER dbms_gtest_sources
+            EXCLUDE
+            REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
+    endif ()
     add_executable(gtests_dbms EXCLUDE_FROM_ALL
         ${dbms_gtest_sources}
         ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
@@ -363,22 +379,70 @@ if (ENABLE_TESTS)
 
     target_link_libraries(gtests_dbms test_util_gtest_main tiflash_functions tiflash-dttool-lib delta_merge kvstore)
     if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
-        if ("${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
+        set(_tiforth_ffi_c_link_target "")
+        set(_tiforth_ffi_c_rpath_dir "")
+        if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "" AND NOT "${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
             message(
                 FATAL_ERROR
-                    "ENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON requires "
-                    "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib>")
+                    "Set only one TiForth linked-library input: "
+                    "either -DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
+                    "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir (with optional -DTIFORTH_FFI_C_LIB_NAME)")
         endif ()
-        if (NOT IS_ABSOLUTE "${TIFORTH_FFI_C_LIBRARY}")
-            message(
-                FATAL_ERROR
-                    "TIFORTH_FFI_C_LIBRARY must be an absolute path, got: ${TIFORTH_FFI_C_LIBRARY}")
+        if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "")
+            if (NOT IS_ABSOLUTE "${TIFORTH_FFI_C_LIBRARY}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIBRARY must be an absolute path: ${TIFORTH_FFI_C_LIBRARY}")
+            endif ()
+            if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
+            endif ()
+            set(_tiforth_ffi_c_link_target "${TIFORTH_FFI_C_LIBRARY}")
+        else ()
+            if ("${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
+                message(
+                    FATAL_ERROR
+                        "ENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON requires either "
+                        "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
+                        "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir "
+                        "(-DTIFORTH_FFI_C_LIB_NAME defaults to tiforth_ffi_c)")
+            endif ()
+            if (NOT IS_ABSOLUTE "${TIFORTH_FFI_C_LIB_DIR}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIB_DIR must be an absolute path: ${TIFORTH_FFI_C_LIB_DIR}")
+            endif ()
+            if (NOT IS_DIRECTORY "${TIFORTH_FFI_C_LIB_DIR}")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIB_DIR is not a directory: ${TIFORTH_FFI_C_LIB_DIR}")
+            endif ()
+            if ("${TIFORTH_FFI_C_LIB_NAME}" STREQUAL "")
+                message(
+                    FATAL_ERROR
+                        "TIFORTH_FFI_C_LIB_NAME must be non-empty when TIFORTH_FFI_C_LIB_DIR is used")
+            endif ()
+            # Keep mode-B linked library lookup deterministic across reconfigure in one build dir.
+            unset(_tiforth_ffi_c_named_library)
+            unset(_tiforth_ffi_c_named_library CACHE)
+            find_library(
+                _tiforth_ffi_c_named_library
+                NAMES "${TIFORTH_FFI_C_LIB_NAME}"
+                PATHS "${TIFORTH_FFI_C_LIB_DIR}"
+                NO_DEFAULT_PATH
+                NO_CACHE)
+            if ("${_tiforth_ffi_c_named_library}" STREQUAL "_tiforth_ffi_c_named_library-NOTFOUND")
+                message(
+                    FATAL_ERROR
+                        "Cannot find ${TIFORTH_FFI_C_LIB_NAME} under TIFORTH_FFI_C_LIB_DIR=${TIFORTH_FFI_C_LIB_DIR}")
+            endif ()
+            set(_tiforth_ffi_c_link_target "${_tiforth_ffi_c_named_library}")
         endif ()
-        if (NOT EXISTS "${TIFORTH_FFI_C_LIBRARY}")
-            message(
-                FATAL_ERROR
-                    "TIFORTH_FFI_C_LIBRARY does not exist: ${TIFORTH_FFI_C_LIBRARY}")
-        endif ()
+        get_filename_component(_tiforth_ffi_c_link_target "${_tiforth_ffi_c_link_target}" REALPATH)
+        get_filename_component(_tiforth_ffi_c_rpath_dir "${_tiforth_ffi_c_link_target}" DIRECTORY)
+
         if ("${CMAKE_NM}" STREQUAL "" OR NOT EXISTS "${CMAKE_NM}")
             message(
                 FATAL_ERROR
@@ -396,14 +460,14 @@ if (ENABLE_TESTS)
             tiforth_execution_host_v2_release_executable
             tiforth_execution_host_v2_release_instance)
         execute_process(
-            COMMAND "${CMAKE_NM}" -g "${TIFORTH_FFI_C_LIBRARY}"
+            COMMAND "${CMAKE_NM}" -g "${_tiforth_ffi_c_link_target}"
             RESULT_VARIABLE _tiforth_nm_result
             OUTPUT_VARIABLE _tiforth_nm_output
             ERROR_VARIABLE _tiforth_nm_error)
         if (NOT _tiforth_nm_result EQUAL 0)
             message(
                 FATAL_ERROR
-                    "Failed to inspect host-v2 symbols in ${TIFORTH_FFI_C_LIBRARY} using ${CMAKE_NM}: ${_tiforth_nm_error}")
+                    "Failed to inspect host-v2 symbols in ${_tiforth_ffi_c_link_target} using ${CMAKE_NM}: ${_tiforth_nm_error}")
         endif ()
         foreach(_tiforth_symbol IN LISTS _tiforth_required_host_v2_symbols)
             string(
@@ -414,13 +478,25 @@ if (ENABLE_TESTS)
             if ("${_tiforth_symbol_match}" STREQUAL "")
                 message(
                     FATAL_ERROR
-                        "TIFORTH_FFI_C_LIBRARY is missing required host-v2 symbol `${_tiforth_symbol}`; "
+                        "${_tiforth_ffi_c_link_target} is missing required host-v2 symbol `${_tiforth_symbol}`; "
                         "choose a libtiforth_ffi_c build that exports host-v2 entrypoints.")
             endif ()
         endforeach ()
 
         target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
-        target_link_libraries(gtests_dbms "${TIFORTH_FFI_C_LIBRARY}")
+        target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
+        message(
+            STATUS
+                "TiForth host-v2 linked donor adapter tests: gtests_dbms links ${_tiforth_ffi_c_link_target}")
+        message(
+            STATUS
+                "TiForth host-v2 linked donor adapter strict run: "
+                "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 ctest --test-dir ${CMAKE_BINARY_DIR} "
+                "-R TestTiforthExecutionHostV2 --output-on-failure")
+        if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
+            set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
+            set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
+        endif ()
     endif ()
 
     install (TARGETS gtests_dbms
@@ -456,8 +532,8 @@ if (ENABLE_TESTS)
                 DESTINATION ".")
     endif()
 
-    set_target_properties(gtests_dbms PROPERTIES BUILD_RPATH "$ORIGIN/")
-    set_target_properties(gtests_dbms PROPERTIES INSTALL_RPATH "$ORIGIN/")
+    set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "$ORIGIN/")
+    set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "$ORIGIN/")
 
     if (ENABLE_CLARA)
         install (SCRIPT ${TiFlash_SOURCE_DIR}/libs/libclara-cmake/linux_post_install.cmake COMPONENT tiflash-gtest)
