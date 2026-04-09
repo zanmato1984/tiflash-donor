@@ -13,6 +13,8 @@ These host-v2 proving tests are compiled into `gtests_dbms` only when
 ## Configure
 
 Choose one linked-library input mode and keep the path absolute.
+When linked tests are enabled, CMake also requires `CMAKE_NM` so host-v2
+symbols can be preflighted before `gtests_dbms` is wired.
 
 ### Mode A: direct library path
 
@@ -44,4 +46,13 @@ TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 \
 ctest --test-dir /tmp/tiflash-linked-host-v2 \
   -R TestTiforthExecutionHostV2 \
   --output-on-failure
+```
+
+If your local CTest registration is incomplete, run the proving slices
+directly from `gtests_dbms`:
+
+```bash
+TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 \
+/tmp/tiflash-linked-host-v2/dbms/gtests_dbms \
+  --gtest_filter='TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*'
 ```
