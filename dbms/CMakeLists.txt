@@ -528,8 +528,8 @@ if (ENABLE_TESTS)
                 DESTINATION ".")
     endif()
 
-    set_target_properties(gtests_dbms PROPERTIES BUILD_RPATH "$ORIGIN/")
-    set_target_properties(gtests_dbms PROPERTIES INSTALL_RPATH "$ORIGIN/")
+    set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "$ORIGIN/")
+    set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "$ORIGIN/")
 
     if (ENABLE_CLARA)
         install (SCRIPT ${TiFlash_SOURCE_DIR}/libs/libclara-cmake/linux_post_install.cmake COMPONENT tiflash-gtest)
