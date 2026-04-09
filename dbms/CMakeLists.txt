@@ -424,11 +424,15 @@ if (ENABLE_TESTS)
                     FATAL_ERROR
                         "TIFORTH_FFI_C_LIB_NAME must be non-empty when TIFORTH_FFI_C_LIB_DIR is used")
             endif ()
+            # Keep mode-B linked library lookup deterministic across reconfigure in one build dir.
+            unset(_tiforth_ffi_c_named_library)
+            unset(_tiforth_ffi_c_named_library CACHE)
             find_library(
                 _tiforth_ffi_c_named_library
                 NAMES "${TIFORTH_FFI_C_LIB_NAME}"
                 PATHS "${TIFORTH_FFI_C_LIB_DIR}"
-                NO_DEFAULT_PATH)
+                NO_DEFAULT_PATH
+                NO_CACHE)
             if ("${_tiforth_ffi_c_named_library}" STREQUAL "_tiforth_ffi_c_named_library-NOTFOUND")
                 message(
                     FATAL_ERROR
