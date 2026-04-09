@@ -294,6 +294,8 @@ if (NOT USE_INTERNAL_LZ4_LIBRARY)
 endif ()
 if (NOT USE_INTERNAL_ZSTD_LIBRARY)
     target_include_directories (dbms BEFORE PRIVATE ${ZSTD_INCLUDE_DIR})
+else ()
+    target_include_directories (dbms BEFORE PRIVATE ${TiFlash_SOURCE_DIR}/contrib/zstd/lib)
 endif ()
 
 if (USE_QPL)
