@@ -19,6 +19,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <fmt/core.h>
@@ -50,6 +51,36 @@ constexpr uint32_t AMBIENT_REQUIREMENT_CHARSET = 1u << 2;
 constexpr uint32_t AMBIENT_REQUIREMENT_DEFAULT_COLLATION = 1u << 3;
 constexpr uint32_t SESSION_CHARSET_UTF8MB4 = 1;
 constexpr uint32_t DEFAULT_COLLATION_UTF8MB4_BIN = 1;
+constexpr const char * BOGUS_RUNTIME_DYLIB_PATH = "/tmp/tiforth_host_v2_linked_tests_should_not_use_runtime_dispatch.dylib";
+
+class ScopedRuntimeDylibEnvOverride
+{
+public:
+    explicit ScopedRuntimeDylibEnvOverride(const char * value)
+    {
+        if (const char * current = std::getenv("TIFORTH_FFI_C_DYLIB"); current != nullptr)
+        {
+            had_previous_value = true;
+            previous_value = current;
+        }
+        applied = (::setenv("TIFORTH_FFI_C_DYLIB", value, 1) == 0);
+    }
+
+    ~ScopedRuntimeDylibEnvOverride()
+    {
+        if (had_previous_value)
+            (void)::setenv("TIFORTH_FFI_C_DYLIB", previous_value.c_str(), 1);
+        else
+            (void)::unsetenv("TIFORTH_FFI_C_DYLIB");
+    }
+
+    bool ok() const { return applied; }
+
+private:
+    bool had_previous_value = false;
+    bool applied = false;
+    String previous_value;
+};
 
 struct TiforthExecutionBuildRequestV2
 {
@@ -982,6 +1013,28 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
               << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
               << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
+}
+
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
+    auto donor_serial = runDonorNativeInnerJoin(1);
+    auto donor_parallel = runDonorNativeInnerJoin(2);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
 }
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityHighPartitionMaxBlockSerialAndParallel)

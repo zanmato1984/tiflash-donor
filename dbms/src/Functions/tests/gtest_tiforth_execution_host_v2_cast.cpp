@@ -16,6 +16,7 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <fmt/core.h>
@@ -44,6 +45,36 @@ constexpr uint32_t BATCH_OWNERSHIP_FOREIGN_RETAINABLE = 2;
 constexpr uint32_t AMBIENT_REQUIREMENT_SQL_MODE = 1u << 0;
 
 constexpr const char * FUNC_NAME_TIDB_CAST = "tidb_cast";
+constexpr const char * BOGUS_RUNTIME_DYLIB_PATH = "/tmp/tiforth_host_v2_linked_tests_should_not_use_runtime_dispatch.dylib";
+
+class ScopedRuntimeDylibEnvOverride
+{
+public:
+    explicit ScopedRuntimeDylibEnvOverride(const char * value)
+    {
+        if (const char * current = std::getenv("TIFORTH_FFI_C_DYLIB"); current != nullptr)
+        {
+            had_previous_value = true;
+            previous_value = current;
+        }
+        applied = (::setenv("TIFORTH_FFI_C_DYLIB", value, 1) == 0);
+    }
+
+    ~ScopedRuntimeDylibEnvOverride()
+    {
+        if (had_previous_value)
+            (void)::setenv("TIFORTH_FFI_C_DYLIB", previous_value.c_str(), 1);
+        else
+            (void)::unsetenv("TIFORTH_FFI_C_DYLIB");
+    }
+
+    bool ok() const { return applied; }
+
+private:
+    bool had_previous_value = false;
+    bool applied = false;
+    String previous_value;
+};
 
 struct TiforthExecutionBuildRequestV2
 {
@@ -413,6 +444,38 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
     std::cout << "[tiforth-host-v2-cast] serial=1 warnings=" << serial.warning_count << " rows=" << serial.output.size()
               << " parallel=2 warnings=" << parallel.warning_count << " rows=" << parallel.output.size()
               << " donor_warnings=" << donor_warning_count << " parity=ok" << std::endl;
+}
+
+TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParityIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
+    auto & dag_context = getDAGContext();
+    ScopedDAGFlags scoped_dag_flags(dag_context);
+    dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
+
+    const std::vector<std::optional<String>> input = {
+        String("12.345"),
+        String("-7.800"),
+        std::nullopt,
+        String("0"),
+        String("999.999"),
+        String("1.2"),
+    };
+
+    auto donor_native = runDonorNativeCastAsString(input);
+    const auto donor_warning_count = dag_context.getWarningCount();
+
+    AdapterRunResult serial;
+    runAdapterCast(input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    AdapterRunResult parallel;
+    runAdapterCast(input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+
+    ASSERT_EQ(serial.warning_count, donor_warning_count);
+    ASSERT_EQ(parallel.warning_count, donor_warning_count);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(serial.output), donor_native);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
 }
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel)
