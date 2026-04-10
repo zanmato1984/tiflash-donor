@@ -369,15 +369,8 @@ public:
         tiforth_execution_host_v2_continue_output(instance, &status, &continued_output);
         ASSERT_EQ(continued_output.row_count, 0u);
         ASSERT_EQ(continued_output.column_count, 0u);
-        if (status.kind != STATUS_KIND_OK)
-        {
-            ASSERT_EQ(status.kind, STATUS_KIND_PROTOCOL_ERROR) << status.message;
-            ASSERT_EQ(status.code, STATUS_CODE_INSTANCE_FINISH_ONLY) << status.message;
-        }
-        else
-        {
-            ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
-        }
+        ASSERT_EQ(status.kind, STATUS_KIND_PROTOCOL_ERROR) << status.message;
+        ASSERT_EQ(status.code, STATUS_CODE_INSTANCE_FINISH_ONLY) << status.message;
 
         tiforth_execution_host_v2_finish(instance, &status);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
