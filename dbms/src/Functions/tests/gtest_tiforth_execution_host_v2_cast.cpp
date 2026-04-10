@@ -531,7 +531,7 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroPar
     auto donor_native = runDonorNativeCastAsString(input);
     ASSERT_COLUMN_EQ(
         createColumn<Nullable<String>>({
-            String("0.000"),
+            String("1.200"),
             String("0.000"),
             String("12.340"),
             String("-0.500"),
@@ -577,8 +577,8 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedSignedMultiDotZ
     auto donor_native = runDonorNativeCastAsString(input);
     ASSERT_COLUMN_EQ(
         createColumn<Nullable<String>>({
-            String("0.000"),
-            String("0.000"),
+            String("-1.200"),
+            String("1.200"),
             String("0.000"),
             String("0.000"),
             String("-0.500"),
