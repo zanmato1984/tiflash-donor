@@ -639,6 +639,41 @@ TEST_F(
     ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
 }
 
+TEST_F(
+    TestTiforthExecutionHostV2Cast,
+    CastUtf8ToDecimalInvalidSyntaxWarningParityIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
+    auto & dag_context = getDAGContext();
+    ScopedDAGFlags scoped_dag_flags(dag_context);
+    dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
+
+    const std::vector<std::optional<String>> input = {
+        String("bad"),
+        String("1.2.3"),
+        String("12.340"),
+        String("-0.500"),
+        std::nullopt,
+        String(""),
+    };
+
+    auto donor_native = runDonorNativeCastAsString(input);
+    const auto donor_warning_count = static_cast<uint32_t>(dag_context.getWarningCount());
+    ASSERT_EQ(donor_warning_count, 0u);
+
+    AdapterRunResult serial;
+    runAdapterCast(input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    AdapterRunResult parallel;
+    runAdapterCast(input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+
+    ASSERT_EQ(serial.warning_count, donor_warning_count);
+    ASSERT_EQ(parallel.warning_count, donor_warning_count);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(serial.output), donor_native);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
+}
+
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningParitySerialAndParallel)
 {
     auto & dag_context = getDAGContext();
