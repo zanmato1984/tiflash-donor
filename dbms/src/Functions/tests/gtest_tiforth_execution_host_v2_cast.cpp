@@ -653,6 +653,8 @@ TEST_F(
     const std::vector<std::optional<String>> input = {
         String("bad"),
         String("1.2.3"),
+        String("-1.2.3"),
+        String("+1.2.3"),
         String("12.340"),
         String("-0.500"),
         std::nullopt,
@@ -683,6 +685,8 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningPari
     const std::vector<std::optional<String>> input = {
         String("bad"),
         String("1.2.3"),
+        String("-1.2.3"),
+        String("+1.2.3"),
         String("12.340"),
         String("-0.500"),
         std::nullopt,
