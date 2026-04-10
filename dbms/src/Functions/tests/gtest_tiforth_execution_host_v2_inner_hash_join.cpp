@@ -171,7 +171,7 @@ void tiforth_execution_host_v2_release_instance(TiforthExecutionInstanceHandleV2
 }
 
 #if !defined(TIFORTH_HOST_V2_LINKED_TESTS)
-#error "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
+#error "build gtests_tiforth_execution_host_v2 (or gtests_dbms) with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
 #endif
 
 bool isValidRow(const TiforthExecutionColumnViewV2 & column, uint32_t row_count, size_t row)
