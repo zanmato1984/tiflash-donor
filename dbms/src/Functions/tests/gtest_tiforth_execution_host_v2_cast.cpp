@@ -543,6 +543,64 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
               << std::endl;
 }
 
+TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroParitySerialAndParallel)
+{
+    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
+    String load_error;
+    auto maybe_api = loadExecutionHostV2Api(load_error);
+    if (!maybe_api.has_value())
+    {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
+        SUCCEED() << load_error;
+        return;
+    }
+
+    auto api = std::move(maybe_api.value());
+    auto & dag_context = getDAGContext();
+    ScopedDAGFlags scoped_dag_flags(dag_context);
+    dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
+
+    const std::vector<std::optional<String>> input = {
+        String("1.2.3"),
+        String("bad"),
+        String("12.340"),
+        String("-0.500"),
+        std::nullopt,
+        String(""),
+    };
+
+    auto donor_native = runDonorNativeCastAsString(input);
+    ASSERT_COLUMN_EQ(
+        createColumn<Nullable<String>>({
+            String("0.000"),
+            String("0.000"),
+            String("12.340"),
+            String("-0.500"),
+            std::nullopt,
+            String("0.000"),
+        }),
+        donor_native);
+    const auto donor_warning_count = static_cast<uint32_t>(dag_context.getWarningCount());
+    ASSERT_EQ(donor_warning_count, 0u);
+
+    AdapterRunResult serial;
+    runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    AdapterRunResult parallel;
+    runAdapterCast(api, input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+
+    ASSERT_EQ(serial.warning_count, donor_warning_count);
+    ASSERT_EQ(parallel.warning_count, donor_warning_count);
+
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(serial.output), donor_native);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
+
+    std::cout << "[tiforth-host-v2-cast-multi-dot] serial=1 warnings=" << serial.warning_count
+              << " rows=" << serial.output.size() << " parallel=2 warnings=" << parallel.warning_count
+              << " rows=" << parallel.output.size() << " donor_warnings=" << donor_warning_count << " parity=ok"
+              << std::endl;
+}
+
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningParitySerialAndParallel)
 {
     const bool strict_runtime_execution = requiresStrictRuntimeExecution();
