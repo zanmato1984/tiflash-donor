@@ -520,7 +520,33 @@ public:
         return result;
     }
 
-    void runAdapterInnerJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
+    static std::vector<JoinInputRow> defaultInnerJoinBuildRows()
+    {
+        return {
+            {String("k"), 10},
+            {String("k"), 20},
+            {String("x"), 30},
+            {std::nullopt, 40},
+        };
+    }
+
+    static std::vector<JoinInputRow> defaultInnerJoinProbeRows()
+    {
+        return {
+            {String("k"), 100},
+            {String("x"), 200},
+            {String("z"), 300},
+            {std::nullopt, 400},
+        };
+    }
+
+    void runAdapterInnerJoin(
+        size_t partitions,
+        uint32_t ownership_mode,
+        const std::vector<JoinInputRow> & build_rows,
+        const std::vector<JoinInputRow> & probe_rows,
+        uint32_t max_block_size,
+        AdapterRunResult & result)
     {
         TiforthExecutionBuildRequestV2 build_request{};
         build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -534,7 +560,7 @@ public:
         build_request.decimal_precision = 0;
         build_request.decimal_scale_is_set = false;
         build_request.decimal_scale = 0;
-        build_request.max_block_size = 0;
+        build_request.max_block_size = max_block_size;
 
         TiforthStatusV2 status{};
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -604,19 +630,6 @@ public:
             }
         };
 
-        const std::vector<JoinInputRow> build_rows = {
-            {String("k"), 10},
-            {String("k"), 20},
-            {String("x"), 30},
-            {std::nullopt, 40},
-        };
-        const std::vector<JoinInputRow> probe_rows = {
-            {String("k"), 100},
-            {String("x"), 200},
-            {String("z"), 300},
-            {std::nullopt, 400},
-        };
-
         drive_input_rows(build_rows, INPUT_ID_BUILD);
 
         TiforthBatchViewV2 build_end_output{};
@@ -645,6 +658,17 @@ public:
         tiforth_execution_host_v2_release_executable(executable);
 
         result.rows = canonicalizeRows(std::move(result.rows));
+    }
+
+    void runAdapterInnerJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
+    {
+        runAdapterInnerJoin(
+            partitions,
+            ownership_mode,
+            defaultInnerJoinBuildRows(),
+            defaultInnerJoinProbeRows(),
+            0,
+            result);
     }
 
     void runAdapterBuildOuterJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
@@ -920,6 +944,43 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
               << " rows=" << adapter_serial.rows.size() << " parallel=2 warnings=" << adapter_parallel.warning_count
               << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
+}
+
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityHighPartitionMaxBlockSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeInnerJoin(1);
+    auto donor_parallel = runDonorNativeInnerJoin(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        defaultInnerJoinBuildRows(),
+        defaultInnerJoinProbeRows(),
+        1,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        defaultInnerJoinBuildRows(),
+        defaultInnerJoinProbeRows(),
+        1,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+
+    std::cout << "[tiforth-host-v2-inner-join-high-partition] serial=8 warnings=" << adapter_serial.warning_count
+              << " rows=" << adapter_serial.rows.size() << " parallel=8 warnings=" << adapter_parallel.warning_count
+              << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
+              << " donor_rows=" << donor_serial.rows.size() << " max_block_size=1 parity=ok" << std::endl;
 }
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
