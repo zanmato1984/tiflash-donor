@@ -21,7 +21,6 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
-#include <cstdlib>
 #include <fmt/core.h>
 #include <iostream>
 #include <optional>
@@ -178,10 +177,12 @@ struct TiforthExecutionHostV2Api
     ReleaseInstanceFn release_instance = nullptr;
 };
 
-std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error)
+#if !defined(TIFORTH_HOST_V2_LINKED_TESTS)
+#error "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
+#endif
+
+TiforthExecutionHostV2Api linkedExecutionHostV2Api()
 {
-#if defined(TIFORTH_HOST_V2_LINKED_TESTS)
-    (void)error;
     TiforthExecutionHostV2Api api;
     api.build = tiforth_execution_host_v2_build;
     api.open = tiforth_execution_host_v2_open;
@@ -193,22 +194,6 @@ std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error)
     api.release_executable = tiforth_execution_host_v2_release_executable;
     api.release_instance = tiforth_execution_host_v2_release_instance;
     return api;
-#else
-    error
-        = "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON "
-          "and either -DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> "
-          "or -DTIFORTH_FFI_C_LIB_DIR=/abs/path/to/libdir "
-          "(-DTIFORTH_FFI_C_LIB_NAME defaults to tiforth_ffi_c); "
-          "see dbms/src/Functions/tests/README.tiforth_host_v2_linked_tests.md "
-          "to run this donor adapter test";
-    return std::nullopt;
-#endif
-}
-
-bool requiresStrictRuntimeExecution()
-{
-    const char * configured = std::getenv("TIFORTH_REQUIRE_RUNTIME_EXECUTION");
-    return configured != nullptr && configured[0] != '\0' && configured[0] != '0';
 }
 
 bool isValidRow(const TiforthExecutionColumnViewV2 & column, uint32_t row_count, size_t row)
@@ -979,18 +964,7 @@ public:
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
-    String load_error;
-    auto maybe_api = loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
-    auto api = std::move(maybe_api.value());
+    auto api = linkedExecutionHostV2Api();
 
     auto donor_serial = runDonorNativeInnerJoin(1);
     auto donor_parallel = runDonorNativeInnerJoin(2);
@@ -1017,18 +991,7 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
-    String load_error;
-    auto maybe_api = loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
-    auto api = std::move(maybe_api.value());
+    auto api = linkedExecutionHostV2Api();
 
     auto donor_serial = runDonorNativeBuildOuterJoin(1);
     auto donor_parallel = runDonorNativeBuildOuterJoin(2);
@@ -1055,18 +1018,7 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = requiresStrictRuntimeExecution();
-    String load_error;
-    auto maybe_api = loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
-    auto api = std::move(maybe_api.value());
+    auto api = linkedExecutionHostV2Api();
 
     auto donor_serial = runDonorNativeProbeOuterJoin(1);
     auto donor_parallel = runDonorNativeProbeOuterJoin(2);
