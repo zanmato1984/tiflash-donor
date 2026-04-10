@@ -128,55 +128,9 @@ void tiforth_execution_host_v2_release_executable(TiforthExecutionExecutableHand
 void tiforth_execution_host_v2_release_instance(TiforthExecutionInstanceHandleV2 * instance);
 }
 
-struct TiforthExecutionHostV2Api
-{
-    using BuildFn = void (*)(
-        const TiforthExecutionBuildRequestV2 *,
-        TiforthStatusV2 *,
-        TiforthExecutionExecutableHandleV2 **);
-    using OpenFn = void (*)(
-        const TiforthExecutionExecutableHandleV2 *,
-        TiforthStatusV2 *,
-        TiforthExecutionInstanceHandleV2 **);
-    using DriveInputBatchFn = void (*)(
-        TiforthExecutionInstanceHandleV2 *,
-        uint32_t,
-        const TiforthBatchViewV2 *,
-        TiforthStatusV2 *,
-        TiforthBatchViewV2 *);
-    using DriveEndOfInputFn = void (*)(TiforthExecutionInstanceHandleV2 *, uint32_t, TiforthStatusV2 *);
-    using ContinueOutputFn = void (*)(TiforthExecutionInstanceHandleV2 *, TiforthStatusV2 *, TiforthBatchViewV2 *);
-    using FinishFn = void (*)(TiforthExecutionInstanceHandleV2 *, TiforthStatusV2 *);
-    using ReleaseExecutableFn = void (*)(TiforthExecutionExecutableHandleV2 *);
-    using ReleaseInstanceFn = void (*)(TiforthExecutionInstanceHandleV2 *);
-
-    BuildFn build = nullptr;
-    OpenFn open = nullptr;
-    DriveInputBatchFn drive_input_batch = nullptr;
-    DriveEndOfInputFn drive_end_of_input = nullptr;
-    ContinueOutputFn continue_output = nullptr;
-    FinishFn finish = nullptr;
-    ReleaseExecutableFn release_executable = nullptr;
-    ReleaseInstanceFn release_instance = nullptr;
-};
-
 #if !defined(TIFORTH_HOST_V2_LINKED_TESTS)
 #error "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
 #endif
-
-TiforthExecutionHostV2Api linkedExecutionHostV2Api()
-{
-    TiforthExecutionHostV2Api api;
-    api.build = tiforth_execution_host_v2_build;
-    api.open = tiforth_execution_host_v2_open;
-    api.drive_input_batch = tiforth_execution_host_v2_drive_input_batch;
-    api.drive_end_of_input = tiforth_execution_host_v2_drive_end_of_input;
-    api.continue_output = tiforth_execution_host_v2_continue_output;
-    api.finish = tiforth_execution_host_v2_finish;
-    api.release_executable = tiforth_execution_host_v2_release_executable;
-    api.release_instance = tiforth_execution_host_v2_release_instance;
-    return api;
-}
 
 bool isValidRow(const TiforthExecutionColumnViewV2 & column, uint32_t row_count, size_t row)
 {
@@ -319,7 +273,6 @@ public:
     }
 
     void runAdapterCast(
-        TiforthExecutionHostV2Api & api,
         const std::vector<std::optional<String>> & input,
         size_t partitions,
         uint32_t ownership_mode,
@@ -342,13 +295,13 @@ public:
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
 
         TiforthExecutionExecutableHandleV2 * executable = nullptr;
-        api.build(&build_request, &status, &executable);
+        tiforth_execution_host_v2_build(&build_request, &status, &executable);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(executable, nullptr);
 
         TiforthExecutionInstanceHandleV2 * instance = nullptr;
-        api.open(executable, &status, &instance);
+        tiforth_execution_host_v2_open(executable, &status, &instance);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(instance, nullptr);
@@ -383,7 +336,7 @@ public:
 
             TiforthBatchViewV2 output{};
             output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-            api.drive_input_batch(instance, INPUT_ID_SCALAR, input_batch, &status, &output);
+            tiforth_execution_host_v2_drive_input_batch(instance, INPUT_ID_SCALAR, input_batch, &status, &output);
 
             ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
             ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
@@ -407,13 +360,13 @@ public:
             }
         }
 
-        api.drive_end_of_input(instance, INPUT_ID_SCALAR, &status);
+        tiforth_execution_host_v2_drive_end_of_input(instance, INPUT_ID_SCALAR, &status);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
 
         TiforthBatchViewV2 continued_output{};
         continued_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.continue_output(instance, &status, &continued_output);
+        tiforth_execution_host_v2_continue_output(instance, &status, &continued_output);
         ASSERT_EQ(continued_output.row_count, 0u);
         ASSERT_EQ(continued_output.column_count, 0u);
         if (status.kind != STATUS_KIND_OK)
@@ -426,18 +379,17 @@ public:
             ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         }
 
-        api.finish(instance, &status);
+        tiforth_execution_host_v2_finish(instance, &status);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
 
-        api.release_instance(instance);
-        api.release_executable(executable);
+        tiforth_execution_host_v2_release_instance(instance);
+        tiforth_execution_host_v2_release_executable(executable);
     }
 };
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
     dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
@@ -455,9 +407,9 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
     const auto donor_warning_count = dag_context.getWarningCount();
 
     AdapterRunResult serial;
-    runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    runAdapterCast(input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
     AdapterRunResult parallel;
-    runAdapterCast(api, input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+    runAdapterCast(input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
 
     ASSERT_EQ(serial.warning_count, donor_warning_count);
     ASSERT_EQ(parallel.warning_count, donor_warning_count);
@@ -472,7 +424,6 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
     dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
@@ -490,9 +441,9 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
     ASSERT_GT(donor_warning_count, 0u);
 
     AdapterRunResult serial;
-    runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    runAdapterCast(input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
     AdapterRunResult parallel;
-    runAdapterCast(api, input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+    runAdapterCast(input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
 
     ASSERT_EQ(serial.warning_count, donor_warning_count);
     ASSERT_EQ(parallel.warning_count, donor_warning_count);
@@ -508,7 +459,6 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
     dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
@@ -537,9 +487,9 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroPar
     ASSERT_EQ(donor_warning_count, 0u);
 
     AdapterRunResult serial;
-    runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    runAdapterCast(input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
     AdapterRunResult parallel;
-    runAdapterCast(api, input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+    runAdapterCast(input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
 
     ASSERT_EQ(serial.warning_count, donor_warning_count);
     ASSERT_EQ(parallel.warning_count, donor_warning_count);
@@ -555,7 +505,6 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroPar
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
     dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
@@ -574,9 +523,9 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningPari
     ASSERT_EQ(donor_warning_count, 0u);
 
     AdapterRunResult serial;
-    runAdapterCast(api, input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
+    runAdapterCast(input, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, serial);
     AdapterRunResult parallel;
-    runAdapterCast(api, input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
+    runAdapterCast(input, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, parallel);
 
     ASSERT_EQ(serial.warning_count, donor_warning_count);
     ASSERT_EQ(parallel.warning_count, donor_warning_count);

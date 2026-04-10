@@ -139,62 +139,9 @@ void tiforth_execution_host_v2_release_executable(TiforthExecutionExecutableHand
 void tiforth_execution_host_v2_release_instance(TiforthExecutionInstanceHandleV2 * instance);
 }
 
-struct TiforthExecutionHostV2Api
-{
-    using BuildFn = void (*) (
-        const TiforthExecutionBuildRequestV2 *,
-        TiforthStatusV2 *,
-        TiforthExecutionExecutableHandleV2 **);
-    using OpenFn = void (*) (
-        const TiforthExecutionExecutableHandleV2 *,
-        TiforthStatusV2 *,
-        TiforthExecutionInstanceHandleV2 **);
-    using DriveInputBatchFn = void (*) (
-        TiforthExecutionInstanceHandleV2 *,
-        uint32_t,
-        const TiforthBatchViewV2 *,
-        TiforthStatusV2 *,
-        TiforthBatchViewV2 *);
-    using DriveEndOfInputFn = void (*) (TiforthExecutionInstanceHandleV2 *, uint32_t, TiforthStatusV2 *);
-    using DriveEndOfInputWithOutputFn = void (*) (
-        TiforthExecutionInstanceHandleV2 *,
-        uint32_t,
-        TiforthStatusV2 *,
-        TiforthBatchViewV2 *);
-    using ContinueOutputFn = void (*) (TiforthExecutionInstanceHandleV2 *, TiforthStatusV2 *, TiforthBatchViewV2 *);
-    using FinishFn = void (*) (TiforthExecutionInstanceHandleV2 *, TiforthStatusV2 *);
-    using ReleaseExecutableFn = void (*) (TiforthExecutionExecutableHandleV2 *);
-    using ReleaseInstanceFn = void (*) (TiforthExecutionInstanceHandleV2 *);
-
-    BuildFn build = nullptr;
-    OpenFn open = nullptr;
-    DriveInputBatchFn drive_input_batch = nullptr;
-    DriveEndOfInputFn drive_end_of_input = nullptr;
-    DriveEndOfInputWithOutputFn drive_end_of_input_with_output = nullptr;
-    ContinueOutputFn continue_output = nullptr;
-    FinishFn finish = nullptr;
-    ReleaseExecutableFn release_executable = nullptr;
-    ReleaseInstanceFn release_instance = nullptr;
-};
-
 #if !defined(TIFORTH_HOST_V2_LINKED_TESTS)
 #error "build gtests_dbms with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
 #endif
-
-TiforthExecutionHostV2Api linkedExecutionHostV2Api()
-{
-    TiforthExecutionHostV2Api api;
-    api.build = tiforth_execution_host_v2_build;
-    api.open = tiforth_execution_host_v2_open;
-    api.drive_input_batch = tiforth_execution_host_v2_drive_input_batch;
-    api.drive_end_of_input = tiforth_execution_host_v2_drive_end_of_input;
-    api.drive_end_of_input_with_output = tiforth_execution_host_v2_drive_end_of_input_with_output;
-    api.continue_output = tiforth_execution_host_v2_continue_output;
-    api.finish = tiforth_execution_host_v2_finish;
-    api.release_executable = tiforth_execution_host_v2_release_executable;
-    api.release_instance = tiforth_execution_host_v2_release_instance;
-    return api;
-}
 
 bool isValidRow(const TiforthExecutionColumnViewV2 & column, uint32_t row_count, size_t row)
 {
@@ -573,11 +520,7 @@ public:
         return result;
     }
 
-    void runAdapterInnerJoin(
-        TiforthExecutionHostV2Api & api,
-        size_t partitions,
-        uint32_t ownership_mode,
-        AdapterRunResult & result)
+    void runAdapterInnerJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
     {
         TiforthExecutionBuildRequestV2 build_request{};
         build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -597,13 +540,13 @@ public:
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
 
         TiforthExecutionExecutableHandleV2 * executable = nullptr;
-        api.build(&build_request, &status, &executable);
+        tiforth_execution_host_v2_build(&build_request, &status, &executable);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(executable, nullptr);
 
         TiforthExecutionInstanceHandleV2 * instance = nullptr;
-        api.open(executable, &status, &instance);
+        tiforth_execution_host_v2_open(executable, &status, &instance);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(instance, nullptr);
@@ -619,7 +562,7 @@ public:
             {
                 TiforthBatchViewV2 continued_output{};
                 continued_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                api.continue_output(instance, &status, &continued_output);
+                tiforth_execution_host_v2_continue_output(instance, &status, &continued_output);
 
                 ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
                 result.warning_count += status.warning_count;
@@ -652,7 +595,7 @@ public:
 
                 TiforthBatchViewV2 output{};
                 output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                api.drive_input_batch(instance, input_id, input_batch, &status, &output);
+                tiforth_execution_host_v2_drive_input_batch(instance, input_id, input_batch, &status, &output);
 
                 ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
                 result.warning_count += status.warning_count;
@@ -678,7 +621,7 @@ public:
 
         TiforthBatchViewV2 build_end_output{};
         build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
+        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         result.warning_count += status.warning_count;
         appendJoinOutputRows(build_end_output, result.rows);
@@ -688,27 +631,23 @@ public:
 
         TiforthBatchViewV2 probe_end_output{};
         probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
+        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         result.warning_count += status.warning_count;
         appendJoinOutputRows(probe_end_output, result.rows);
         drain_output();
 
-        api.finish(instance, &status);
+        tiforth_execution_host_v2_finish(instance, &status);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
 
-        api.release_instance(instance);
-        api.release_executable(executable);
+        tiforth_execution_host_v2_release_instance(instance);
+        tiforth_execution_host_v2_release_executable(executable);
 
         result.rows = canonicalizeRows(std::move(result.rows));
     }
 
-    void runAdapterBuildOuterJoin(
-        TiforthExecutionHostV2Api & api,
-        size_t partitions,
-        uint32_t ownership_mode,
-        AdapterRunResult & result)
+    void runAdapterBuildOuterJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
     {
         TiforthExecutionBuildRequestV2 build_request{};
         build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -727,13 +666,13 @@ public:
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
 
         TiforthExecutionExecutableHandleV2 * executable = nullptr;
-        api.build(&build_request, &status, &executable);
+        tiforth_execution_host_v2_build(&build_request, &status, &executable);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(executable, nullptr);
 
         TiforthExecutionInstanceHandleV2 * instance = nullptr;
-        api.open(executable, &status, &instance);
+        tiforth_execution_host_v2_open(executable, &status, &instance);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(instance, nullptr);
@@ -749,7 +688,7 @@ public:
             {
                 TiforthBatchViewV2 continued_output{};
                 continued_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                api.continue_output(instance, &status, &continued_output);
+                tiforth_execution_host_v2_continue_output(instance, &status, &continued_output);
 
                 ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
                 result.warning_count += status.warning_count;
@@ -782,7 +721,7 @@ public:
 
                 TiforthBatchViewV2 output{};
                 output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                api.drive_input_batch(instance, input_id, input_batch, &status, &output);
+                tiforth_execution_host_v2_drive_input_batch(instance, input_id, input_batch, &status, &output);
 
                 ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
                 result.warning_count += status.warning_count;
@@ -806,7 +745,7 @@ public:
 
         TiforthBatchViewV2 build_end_output{};
         build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
+        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         result.warning_count += status.warning_count;
         appendJoinOutputRows(build_end_output, result.rows);
@@ -816,27 +755,23 @@ public:
 
         TiforthBatchViewV2 probe_end_output{};
         probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
+        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         result.warning_count += status.warning_count;
         appendJoinOutputRows(probe_end_output, result.rows);
         drain_output();
 
-        api.finish(instance, &status);
+        tiforth_execution_host_v2_finish(instance, &status);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
 
-        api.release_instance(instance);
-        api.release_executable(executable);
+        tiforth_execution_host_v2_release_instance(instance);
+        tiforth_execution_host_v2_release_executable(executable);
 
         result.rows = canonicalizeRows(std::move(result.rows));
     }
 
-    void runAdapterProbeOuterJoin(
-        TiforthExecutionHostV2Api & api,
-        size_t partitions,
-        uint32_t ownership_mode,
-        AdapterRunResult & result)
+    void runAdapterProbeOuterJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
     {
         TiforthExecutionBuildRequestV2 build_request{};
         build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
@@ -855,13 +790,13 @@ public:
         status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
 
         TiforthExecutionExecutableHandleV2 * executable = nullptr;
-        api.build(&build_request, &status, &executable);
+        tiforth_execution_host_v2_build(&build_request, &status, &executable);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(executable, nullptr);
 
         TiforthExecutionInstanceHandleV2 * instance = nullptr;
-        api.open(executable, &status, &instance);
+        tiforth_execution_host_v2_open(executable, &status, &instance);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
         ASSERT_NE(instance, nullptr);
@@ -877,7 +812,7 @@ public:
             {
                 TiforthBatchViewV2 continued_output{};
                 continued_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                api.continue_output(instance, &status, &continued_output);
+                tiforth_execution_host_v2_continue_output(instance, &status, &continued_output);
 
                 ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
                 result.warning_count += status.warning_count;
@@ -910,7 +845,7 @@ public:
 
                 TiforthBatchViewV2 output{};
                 output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                api.drive_input_batch(instance, input_id, input_batch, &status, &output);
+                tiforth_execution_host_v2_drive_input_batch(instance, input_id, input_batch, &status, &output);
 
                 ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
                 result.warning_count += status.warning_count;
@@ -935,7 +870,7 @@ public:
 
         TiforthBatchViewV2 build_end_output{};
         build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
+        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         result.warning_count += status.warning_count;
         appendJoinOutputRows(build_end_output, result.rows);
@@ -945,18 +880,18 @@ public:
 
         TiforthBatchViewV2 probe_end_output{};
         probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        api.drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
+        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         result.warning_count += status.warning_count;
         appendJoinOutputRows(probe_end_output, result.rows);
         drain_output();
 
-        api.finish(instance, &status);
+        tiforth_execution_host_v2_finish(instance, &status);
         ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
         ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
 
-        api.release_instance(instance);
-        api.release_executable(executable);
+        tiforth_execution_host_v2_release_instance(instance);
+        tiforth_execution_host_v2_release_executable(executable);
 
         result.rows = canonicalizeRows(std::move(result.rows));
     }
@@ -964,8 +899,6 @@ public:
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
-
     auto donor_serial = runDonorNativeInnerJoin(1);
     auto donor_parallel = runDonorNativeInnerJoin(2);
 
@@ -973,9 +906,9 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
     ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
 
     AdapterRunResult adapter_serial;
-    runAdapterInnerJoin(api, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
+    runAdapterInnerJoin(1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
     AdapterRunResult adapter_parallel;
-    runAdapterInnerJoin(api, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
+    runAdapterInnerJoin(2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
 
     ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
     ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
@@ -991,8 +924,6 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
-
     auto donor_serial = runDonorNativeBuildOuterJoin(1);
     auto donor_parallel = runDonorNativeBuildOuterJoin(2);
 
@@ -1000,9 +931,9 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
     ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
 
     AdapterRunResult adapter_serial;
-    runAdapterBuildOuterJoin(api, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
+    runAdapterBuildOuterJoin(1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
     AdapterRunResult adapter_parallel;
-    runAdapterBuildOuterJoin(api, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
+    runAdapterBuildOuterJoin(2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
 
     ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
     ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
@@ -1018,8 +949,6 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
 
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParitySerialAndParallel)
 {
-    auto api = linkedExecutionHostV2Api();
-
     auto donor_serial = runDonorNativeProbeOuterJoin(1);
     auto donor_parallel = runDonorNativeProbeOuterJoin(2);
 
@@ -1027,9 +956,9 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityS
     ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
 
     AdapterRunResult adapter_serial;
-    runAdapterProbeOuterJoin(api, 1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
+    runAdapterProbeOuterJoin(1, BATCH_OWNERSHIP_BORROW_WITHIN_CALL, adapter_serial);
     AdapterRunResult adapter_parallel;
-    runAdapterProbeOuterJoin(api, 2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
+    runAdapterProbeOuterJoin(2, BATCH_OWNERSHIP_FOREIGN_RETAINABLE, adapter_parallel);
 
     ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
     ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
