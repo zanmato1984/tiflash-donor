@@ -360,14 +360,14 @@ if (ENABLE_TESTS)
         ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_cast.cpp
         ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_inner_hash_join.cpp)
 
-    # attach all dbms gtest sources
+    # Attach all dbms gtest sources except host-v2 proving files.
+    # Those proving files are built only via the dedicated linked target below
+    # to avoid duplicate compilation and mixed-path execution.
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
-    if (NOT ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
-        list(
-            FILTER dbms_gtest_sources
-            EXCLUDE
-            REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
-    endif ()
+    list(
+        FILTER dbms_gtest_sources
+        EXCLUDE
+        REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
     add_executable(gtests_dbms EXCLUDE_FROM_ALL
         ${dbms_gtest_sources}
         ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
@@ -486,8 +486,6 @@ if (ENABLE_TESTS)
             endif ()
         endforeach ()
 
-        target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
-        target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
         add_executable(gtests_tiforth_execution_host_v2 EXCLUDE_FROM_ALL
             ${_tiforth_host_v2_gtest_sources}
             ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
@@ -510,8 +508,8 @@ if (ENABLE_TESTS)
         add_target_pch("pch-dbms.h" gtests_tiforth_execution_host_v2)
         message(
             STATUS
-                "TiForth host-v2 linked donor adapter tests: gtests_dbms and "
-                "gtests_tiforth_execution_host_v2 link ${_tiforth_ffi_c_link_target}")
+                "TiForth host-v2 linked donor adapter tests: "
+                "gtests_tiforth_execution_host_v2 links ${_tiforth_ffi_c_link_target}")
         message(
             STATUS
                 "TiForth host-v2 linked donor adapter strict run: "
@@ -532,8 +530,6 @@ if (ENABLE_TESTS)
             PROPERTIES
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
-            set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
-            set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
             set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
             set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
         endif ()
