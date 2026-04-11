@@ -1074,6 +1074,42 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityHighPa
               << " donor_rows=" << donor_serial.rows.size() << " max_block_size=1 parity=ok" << std::endl;
 }
 
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
+    InnerHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
+    auto donor_serial = runDonorNativeInnerJoin(1);
+    auto donor_parallel = runDonorNativeInnerJoin(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        defaultInnerJoinBuildRows(),
+        defaultInnerJoinProbeRows(),
+        1,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        defaultInnerJoinBuildRows(),
+        defaultInnerJoinProbeRows(),
+        1,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+}
+
 TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParitySerialAndParallel)
 {
     auto donor_serial = runDonorNativeBuildOuterJoin(1);
