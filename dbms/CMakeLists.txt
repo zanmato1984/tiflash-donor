@@ -462,8 +462,14 @@ if (ENABLE_TESTS)
             tiforth_execution_host_v2_finish
             tiforth_execution_host_v2_release_executable
             tiforth_execution_host_v2_release_instance)
+        set(_tiforth_nm_args -g)
+        if (APPLE)
+            list(APPEND _tiforth_nm_args -U)
+        else ()
+            list(APPEND _tiforth_nm_args --defined-only)
+        endif ()
         execute_process(
-            COMMAND "${CMAKE_NM}" -g "${_tiforth_ffi_c_link_target}"
+            COMMAND "${CMAKE_NM}" ${_tiforth_nm_args} "${_tiforth_ffi_c_link_target}"
             RESULT_VARIABLE _tiforth_nm_result
             OUTPUT_VARIABLE _tiforth_nm_output
             ERROR_VARIABLE _tiforth_nm_error)
@@ -481,7 +487,7 @@ if (ENABLE_TESTS)
             if ("${_tiforth_symbol_match}" STREQUAL "")
                 message(
                     FATAL_ERROR
-                        "${_tiforth_ffi_c_link_target} is missing required host-v2 symbol `${_tiforth_symbol}`; "
+                        "${_tiforth_ffi_c_link_target} is missing required defined host-v2 symbol `${_tiforth_symbol}`; "
                         "choose a libtiforth_ffi_c build that exports host-v2 entrypoints.")
             endif ()
         endforeach ()
