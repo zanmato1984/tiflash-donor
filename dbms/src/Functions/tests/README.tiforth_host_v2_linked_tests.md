@@ -15,7 +15,7 @@ These host-v2 proving tests are compiled into
 
 Before running the linked host-v2 configure/build commands in a fresh worktree,
 initialize the required donor submodules (including nested dependencies used by
-`gtests_tiforth_execution_host_v2`) with:
+the linked proving binaries) with:
 
 ```bash
 ./dbms/src/Functions/tests/bootstrap_tiforth_host_v2_linked_submodules.sh

@@ -55,4 +55,8 @@ git submodule update --init \
 # Keep this explicit instead of blanket recursion.
 git -C contrib/grpc submodule update --init third_party/cares/cares
 git -C contrib/prometheus-cpp submodule update --init 3rdparty/civetweb
-git -C contrib/client-c submodule update --init third_party/libfiu
+git -C contrib/client-c submodule update --init \
+  third_party/abseil-cpp \
+  third_party/googletest \
+  third_party/kvproto \
+  third_party/libfiu
