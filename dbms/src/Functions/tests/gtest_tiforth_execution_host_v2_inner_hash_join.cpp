@@ -188,6 +188,13 @@ public:
 
         context.addMockTable(
             "tiforth_host_v2",
+            "empty_inner_probe_input",
+            {{"join_key", TiDB::TP::TypeString}, {"probe_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", std::vector<std::optional<String>>{}),
+             toNullableVec<Int64>("probe_payload", std::vector<std::optional<Int64>>{})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
             "fanout_build_input",
             {{"join_key", TiDB::TP::TypeString}, {"build_payload", TiDB::TP::TypeLongLong}},
             {toNullableVec<String>("join_key", {"k", "k", "k", "x", "z", {}}),
@@ -409,6 +416,14 @@ public:
             "empty_inner_build_input");
     }
 
+    DonorRunResult runDonorNativeInnerJoinEmptyProbe(size_t concurrency)
+    {
+        return runDonorNativeInnerJoinWithInputs(
+            concurrency,
+            "empty_inner_probe_input",
+            "build_input");
+    }
+
     DonorRunResult runDonorNativeBuildOuterJoinWithInputs(
         size_t concurrency,
         const char * probe_table,
@@ -615,6 +630,11 @@ public:
     }
 
     static std::vector<JoinInputRow> emptyInnerJoinBuildRows()
+    {
+        return {};
+    }
+
+    static std::vector<JoinInputRow> emptyInnerJoinProbeRows()
     {
         return {};
     }
@@ -1331,6 +1351,44 @@ TEST_F(
         BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
         emptyInnerJoinBuildRows(),
         defaultInnerJoinProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), 0u);
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
+    InnerHashJoinPayloadEmptyProbeParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeInnerJoinEmptyProbe(1);
+    auto donor_parallel = runDonorNativeInnerJoinEmptyProbe(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        defaultInnerJoinBuildRows(),
+        emptyInnerJoinProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        defaultInnerJoinBuildRows(),
+        emptyInnerJoinProbeRows(),
         1,
         false,
         false,
