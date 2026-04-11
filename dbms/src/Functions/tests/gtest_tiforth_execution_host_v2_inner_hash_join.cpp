@@ -195,6 +195,20 @@ public:
 
         context.addMockTable(
             "tiforth_host_v2",
+            "all_null_inner_build_input",
+            {{"join_key", TiDB::TP::TypeString}, {"build_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", {{}, {}, {}}),
+             toNullableVec<Int64>("build_payload", {10, 11, 12})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
+            "all_null_inner_probe_input",
+            {{"join_key", TiDB::TP::TypeString}, {"probe_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", {{}, {}, {}}),
+             toNullableVec<Int64>("probe_payload", {100, 101, 102})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
             "fanout_build_input",
             {{"join_key", TiDB::TP::TypeString}, {"build_payload", TiDB::TP::TypeLongLong}},
             {toNullableVec<String>("join_key", {"k", "k", "k", "x", "z", {}}),
@@ -251,6 +265,20 @@ public:
 
         context.addMockTable(
             "tiforth_host_v2",
+            "all_null_build_outer_build_input",
+            {{"join_key", TiDB::TP::TypeLongLong}, {"build_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<Int64>("join_key", {{}, {}, {}}),
+             toNullableVec<Int64>("build_payload", {10, 11, 12})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
+            "all_null_build_outer_probe_input",
+            {{"join_key", TiDB::TP::TypeLongLong}, {"probe_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<Int64>("join_key", {{}, {}}),
+             toNullableVec<Int64>("probe_payload", {100, 101})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
             "probe_outer_build_input",
             {{"join_key", TiDB::TP::TypeLongLong}, {"build_payload", TiDB::TP::TypeLongLong}},
             {toNullableVec<Int64>("join_key", {1, 1, 5}),
@@ -276,6 +304,20 @@ public:
             {{"join_key", TiDB::TP::TypeLongLong}, {"probe_payload", TiDB::TP::TypeLongLong}},
             {toNullableVec<Int64>("join_key", std::vector<std::optional<Int64>>{}),
              toNullableVec<Int64>("probe_payload", std::vector<std::optional<Int64>>{})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
+            "all_null_probe_outer_build_input",
+            {{"join_key", TiDB::TP::TypeLongLong}, {"build_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<Int64>("join_key", {{}, {}}),
+             toNullableVec<Int64>("build_payload", {10, 11})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
+            "all_null_probe_outer_probe_input",
+            {{"join_key", TiDB::TP::TypeLongLong}, {"probe_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<Int64>("join_key", {{}, {}, {}}),
+             toNullableVec<Int64>("probe_payload", {100, 101, 102})});
 
         context.addMockTable(
             "tiforth_host_v2",
@@ -446,6 +488,14 @@ public:
             "empty_inner_build_input");
     }
 
+    DonorRunResult runDonorNativeInnerJoinAllNull(size_t concurrency)
+    {
+        return runDonorNativeInnerJoinWithInputs(
+            concurrency,
+            "all_null_inner_probe_input",
+            "all_null_inner_build_input");
+    }
+
     DonorRunResult runDonorNativeBuildOuterJoinWithInputs(
         size_t concurrency,
         const char * probe_table,
@@ -522,6 +572,14 @@ public:
             "build_outer_empty_build_input");
     }
 
+    DonorRunResult runDonorNativeBuildOuterJoinAllNull(size_t concurrency)
+    {
+        return runDonorNativeBuildOuterJoinWithInputs(
+            concurrency,
+            "all_null_build_outer_probe_input",
+            "all_null_build_outer_build_input");
+    }
+
     DonorRunResult runDonorNativeProbeOuterJoinWithInputs(
         size_t concurrency,
         const char * probe_table,
@@ -596,6 +654,14 @@ public:
             concurrency,
             "probe_outer_empty_probe_input",
             "probe_outer_empty_build_input");
+    }
+
+    DonorRunResult runDonorNativeProbeOuterJoinAllNull(size_t concurrency)
+    {
+        return runDonorNativeProbeOuterJoinWithInputs(
+            concurrency,
+            "all_null_probe_outer_probe_input",
+            "all_null_probe_outer_build_input");
     }
 
     static std::vector<JoinInputRow> defaultInnerJoinBuildRows()
@@ -693,6 +759,24 @@ public:
         return {};
     }
 
+    static std::vector<JoinInputRow> allNullInnerJoinBuildRows()
+    {
+        return {
+            {std::nullopt, 10},
+            {std::nullopt, 11},
+            {std::nullopt, 12},
+        };
+    }
+
+    static std::vector<JoinInputRow> allNullInnerJoinProbeRows()
+    {
+        return {
+            {std::nullopt, 100},
+            {std::nullopt, 101},
+            {std::nullopt, 102},
+        };
+    }
+
     static std::vector<Int64JoinInputRow> defaultBuildOuterBuildRows()
     {
         return {
@@ -786,6 +870,23 @@ public:
         };
     }
 
+    static std::vector<Int64JoinInputRow> allNullBuildOuterBuildRows()
+    {
+        return {
+            {std::nullopt, 10},
+            {std::nullopt, 11},
+            {std::nullopt, 12},
+        };
+    }
+
+    static std::vector<Int64JoinInputRow> allNullBuildOuterProbeRows()
+    {
+        return {
+            {std::nullopt, 100},
+            {std::nullopt, 101},
+        };
+    }
+
     static std::vector<Int64JoinInputRow> defaultProbeOuterBuildRows()
     {
         return {
@@ -875,6 +976,23 @@ public:
             {8, 800},
             {9, 900},
             {std::nullopt, 1000},
+        };
+    }
+
+    static std::vector<Int64JoinInputRow> allNullProbeOuterBuildRows()
+    {
+        return {
+            {std::nullopt, 10},
+            {std::nullopt, 11},
+        };
+    }
+
+    static std::vector<Int64JoinInputRow> allNullProbeOuterProbeRows()
+    {
+        return {
+            {std::nullopt, 100},
+            {std::nullopt, 101},
+            {std::nullopt, 102},
         };
     }
 
@@ -1505,6 +1623,44 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
+    InnerHashJoinPayloadAllNullKeyParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeInnerJoinAllNull(1);
+    auto donor_parallel = runDonorNativeInnerJoinAllNull(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        allNullInnerJoinBuildRows(),
+        allNullInnerJoinProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        allNullInnerJoinBuildRows(),
+        allNullInnerJoinProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), 0u);
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
     InnerHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
 {
     ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
@@ -1886,6 +2042,44 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
+    BuildOuterHashJoinPayloadAllNullKeyParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeBuildOuterJoinAllNull(1);
+    auto donor_parallel = runDonorNativeBuildOuterJoinAllNull(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterBuildOuterJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        allNullBuildOuterBuildRows(),
+        allNullBuildOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterBuildOuterJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        allNullBuildOuterBuildRows(),
+        allNullBuildOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), allNullBuildOuterBuildRows().size());
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
     BuildOuterHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
 {
     ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
@@ -2251,6 +2445,44 @@ TEST_F(
     ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
     ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
     ASSERT_EQ(adapter_serial.rows.size(), 0u);
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
+    ProbeOuterHashJoinPayloadAllNullKeyParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeProbeOuterJoinAllNull(1);
+    auto donor_parallel = runDonorNativeProbeOuterJoinAllNull(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterProbeOuterJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        allNullProbeOuterBuildRows(),
+        allNullProbeOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterProbeOuterJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        allNullProbeOuterBuildRows(),
+        allNullProbeOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), allNullProbeOuterProbeRows().size());
 }
 
 TEST_F(
