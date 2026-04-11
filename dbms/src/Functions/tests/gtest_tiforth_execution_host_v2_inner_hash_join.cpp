@@ -14,6 +14,7 @@
 
 #include <Columns/ColumnNullable.h>
 #include <Columns/ColumnsNumber.h>
+#include <Functions/TiforthExecutionHostV2Adapter.h>
 #include <Functions/FunctionHelpers.h>
 #include <TestUtils/ExecutorTestUtils.h>
 #include <gtest/gtest.h>
@@ -35,7 +36,6 @@ namespace
 {
 
 constexpr uint32_t EXECUTION_HOST_V2_ABI_VERSION = 4;
-constexpr uint32_t PLAN_KIND_INNER_HASH_JOIN_UTF8_KEY_INT64_PAYLOAD = 2;
 constexpr uint32_t PLAN_KIND_PROBE_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD = 6;
 constexpr uint32_t PLAN_KIND_BUILD_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD = 10;
 constexpr uint32_t INPUT_ID_BUILD = 0;
@@ -47,10 +47,6 @@ constexpr uint32_t PHYSICAL_TYPE_INT64 = 1;
 constexpr uint32_t PHYSICAL_TYPE_UTF8 = 2;
 constexpr uint32_t BATCH_OWNERSHIP_BORROW_WITHIN_CALL = 1;
 constexpr uint32_t BATCH_OWNERSHIP_FOREIGN_RETAINABLE = 2;
-constexpr uint32_t AMBIENT_REQUIREMENT_CHARSET = 1u << 2;
-constexpr uint32_t AMBIENT_REQUIREMENT_DEFAULT_COLLATION = 1u << 3;
-constexpr uint32_t SESSION_CHARSET_UTF8MB4 = 1;
-constexpr uint32_t DEFAULT_COLLATION_UTF8MB4_BIN = 1;
 constexpr const char * BOGUS_RUNTIME_DYLIB_PATH = "/tmp/tiforth_host_v2_linked_tests_should_not_use_runtime_dispatch.dylib";
 
 class ScopedRuntimeDylibEnvOverride
@@ -784,120 +780,24 @@ public:
         uint32_t max_block_size,
         AdapterRunResult & result)
     {
-        TiforthExecutionBuildRequestV2 build_request{};
-        build_request.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        build_request.plan_kind = PLAN_KIND_INNER_HASH_JOIN_UTF8_KEY_INT64_PAYLOAD;
-        build_request.ambient_requirement_mask =
-            AMBIENT_REQUIREMENT_CHARSET | AMBIENT_REQUIREMENT_DEFAULT_COLLATION;
-        build_request.sql_mode = 0;
-        build_request.session_charset = SESSION_CHARSET_UTF8MB4;
-        build_request.default_collation = DEFAULT_COLLATION_UTF8MB4_BIN;
-        build_request.decimal_precision_is_set = false;
-        build_request.decimal_precision = 0;
-        build_request.decimal_scale_is_set = false;
-        build_request.decimal_scale = 0;
-        build_request.max_block_size = max_block_size;
+        String load_error;
+        auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
+        ASSERT_TRUE(maybe_api.has_value()) << load_error;
 
-        TiforthStatusV2 status{};
-        status.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
+        auto run_result = Tiforth::runJoinUtf8KeyInt64Payload(
+            maybe_api.value(),
+            Tiforth::PLAN_KIND_INNER_HASH_JOIN_UTF8_KEY_INT64_PAYLOAD,
+            build_rows,
+            probe_rows,
+            partitions,
+            ownership_mode,
+            Tiforth::AMBIENT_REQUIREMENT_CHARSET | Tiforth::AMBIENT_REQUIREMENT_DEFAULT_COLLATION,
+            Tiforth::SESSION_CHARSET_UTF8MB4,
+            Tiforth::DEFAULT_COLLATION_UTF8MB4_BIN,
+            max_block_size);
 
-        TiforthExecutionExecutableHandleV2 * executable = nullptr;
-        tiforth_execution_host_v2_build(&build_request, &status, &executable);
-        ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-        ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
-        ASSERT_NE(executable, nullptr);
-
-        TiforthExecutionInstanceHandleV2 * instance = nullptr;
-        tiforth_execution_host_v2_open(executable, &status, &instance);
-        ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-        ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
-        ASSERT_NE(instance, nullptr);
-
-        result.rows.clear();
-        result.warning_count = 0;
-        std::vector<JoinBatchOwned> retained_batches;
-        if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
-        {
-            retained_batches.reserve(
-                partitionedChunkCount(build_rows.size(), partitions)
-                + partitionedChunkCount(probe_rows.size(), partitions));
-        }
-
-        auto drain_output = [&]() {
-            while (status.code == STATUS_CODE_MORE_OUTPUT_AVAILABLE)
-            {
-                TiforthBatchViewV2 continued_output{};
-                continued_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                tiforth_execution_host_v2_continue_output(instance, &status, &continued_output);
-
-                ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-                result.warning_count += status.warning_count;
-                appendJoinOutputRows(continued_output, result.rows);
-            }
-            ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
-        };
-
-        auto drive_input_rows = [&](const std::vector<JoinInputRow> & rows, uint32_t input_id) {
-            const size_t chunk_size = std::max<size_t>(1, (rows.size() + partitions - 1) / partitions);
-            for (size_t start = 0; start < rows.size(); start += chunk_size)
-            {
-                const size_t end = std::min(rows.size(), start + chunk_size);
-                std::vector<JoinInputRow> chunk(
-                    rows.begin() + static_cast<ptrdiff_t>(start),
-                    rows.begin() + static_cast<ptrdiff_t>(end));
-
-                const TiforthBatchViewV2 * input_batch = nullptr;
-                std::optional<JoinBatchOwned> borrowed_batch;
-                if (ownership_mode == BATCH_OWNERSHIP_FOREIGN_RETAINABLE)
-                {
-                    retained_batches.emplace_back(chunk, ownership_mode);
-                    input_batch = &retained_batches.back().batch;
-                }
-                else
-                {
-                    borrowed_batch.emplace(chunk, ownership_mode);
-                    input_batch = &borrowed_batch->batch;
-                }
-
-                TiforthBatchViewV2 output{};
-                output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-                tiforth_execution_host_v2_drive_input_batch(instance, input_id, input_batch, &status, &output);
-
-                ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-                result.warning_count += status.warning_count;
-                appendJoinOutputRows(output, result.rows);
-                drain_output();
-            }
-        };
-
-        drive_input_rows(build_rows, INPUT_ID_BUILD);
-
-        TiforthBatchViewV2 build_end_output{};
-        build_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_BUILD, &status, &build_end_output);
-        ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-        result.warning_count += status.warning_count;
-        appendJoinOutputRows(build_end_output, result.rows);
-        drain_output();
-
-        drive_input_rows(probe_rows, INPUT_ID_PROBE);
-
-        TiforthBatchViewV2 probe_end_output{};
-        probe_end_output.abi_version = EXECUTION_HOST_V2_ABI_VERSION;
-        tiforth_execution_host_v2_drive_end_of_input_with_output(instance, INPUT_ID_PROBE, &status, &probe_end_output);
-        ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-        result.warning_count += status.warning_count;
-        appendJoinOutputRows(probe_end_output, result.rows);
-        drain_output();
-
-        tiforth_execution_host_v2_finish(instance, &status);
-        ASSERT_EQ(status.kind, STATUS_KIND_OK) << status.message;
-        ASSERT_EQ(status.code, STATUS_CODE_NONE) << status.message;
-
-        tiforth_execution_host_v2_release_instance(instance);
-        tiforth_execution_host_v2_release_executable(executable);
-
-        result.rows = canonicalizeRows(std::move(result.rows));
+        result.rows = std::move(run_result.rows);
+        result.warning_count = run_result.warning_count;
     }
 
     void runAdapterInnerJoin(size_t partitions, uint32_t ownership_mode, AdapterRunResult & result)
