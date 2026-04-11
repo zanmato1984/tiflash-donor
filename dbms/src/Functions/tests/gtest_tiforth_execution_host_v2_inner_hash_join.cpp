@@ -522,6 +522,8 @@ public:
         const std::vector<Int64JoinInputRow> & build_rows,
         const std::vector<Int64JoinInputRow> & probe_rows,
         uint32_t max_block_size,
+        bool build_end_with_output,
+        bool probe_end_with_output,
         AdapterRunResult & result)
     {
         String load_error;
@@ -538,7 +540,9 @@ public:
             0,
             0,
             0,
-            max_block_size);
+            max_block_size,
+            build_end_with_output,
+            probe_end_with_output);
 
         result.rows = std::move(run_result.rows);
         result.warning_count = run_result.warning_count;
@@ -550,6 +554,8 @@ public:
         const std::vector<Int64JoinInputRow> & build_rows,
         const std::vector<Int64JoinInputRow> & probe_rows,
         uint32_t max_block_size,
+        bool build_end_with_output,
+        bool probe_end_with_output,
         AdapterRunResult & result)
     {
         runAdapterInt64Join(
@@ -559,6 +565,27 @@ public:
             build_rows,
             probe_rows,
             max_block_size,
+            build_end_with_output,
+            probe_end_with_output,
+            result);
+    }
+
+    void runAdapterBuildOuterJoin(
+        size_t partitions,
+        uint32_t ownership_mode,
+        const std::vector<Int64JoinInputRow> & build_rows,
+        const std::vector<Int64JoinInputRow> & probe_rows,
+        uint32_t max_block_size,
+        AdapterRunResult & result)
+    {
+        runAdapterBuildOuterJoin(
+            partitions,
+            ownership_mode,
+            build_rows,
+            probe_rows,
+            max_block_size,
+            true,
+            true,
             result);
     }
 
@@ -570,6 +597,8 @@ public:
             defaultBuildOuterBuildRows(),
             defaultBuildOuterProbeRows(),
             0,
+            true,
+            true,
             result);
     }
 
@@ -585,6 +614,30 @@ public:
             defaultBuildOuterBuildRows(),
             defaultBuildOuterProbeRows(),
             max_block_size,
+            true,
+            true,
+            result);
+    }
+
+    void runAdapterProbeOuterJoin(
+        size_t partitions,
+        uint32_t ownership_mode,
+        const std::vector<Int64JoinInputRow> & build_rows,
+        const std::vector<Int64JoinInputRow> & probe_rows,
+        uint32_t max_block_size,
+        bool build_end_with_output,
+        bool probe_end_with_output,
+        AdapterRunResult & result)
+    {
+        runAdapterInt64Join(
+            Tiforth::PLAN_KIND_PROBE_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD,
+            partitions,
+            ownership_mode,
+            build_rows,
+            probe_rows,
+            max_block_size,
+            build_end_with_output,
+            probe_end_with_output,
             result);
     }
 
@@ -596,13 +649,14 @@ public:
         uint32_t max_block_size,
         AdapterRunResult & result)
     {
-        runAdapterInt64Join(
-            Tiforth::PLAN_KIND_PROBE_OUTER_HASH_JOIN_INT64_KEY_INT64_PAYLOAD,
+        runAdapterProbeOuterJoin(
             partitions,
             ownership_mode,
             build_rows,
             probe_rows,
             max_block_size,
+            true,
+            true,
             result);
     }
 
@@ -614,6 +668,8 @@ public:
             defaultProbeOuterBuildRows(),
             defaultProbeOuterProbeRows(),
             0,
+            true,
+            true,
             result);
     }
 
@@ -629,6 +685,8 @@ public:
             defaultProbeOuterBuildRows(),
             defaultProbeOuterProbeRows(),
             max_block_size,
+            true,
+            true,
             result);
     }
 };
@@ -940,6 +998,50 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
+    BuildOuterHashJoinPayloadFanoutParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeBuildOuterJoinFanout(1);
+    auto donor_parallel = runDonorNativeBuildOuterJoinFanout(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterBuildOuterJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        fanoutBuildOuterBuildRows(),
+        fanoutBuildOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterBuildOuterJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        fanoutBuildOuterBuildRows(),
+        fanoutBuildOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), 9u);
+
+    std::cout << "[tiforth-host-v2-build-outer-join-fanout-legacy-end] serial=8 warnings="
+              << adapter_serial.warning_count << " rows=" << adapter_serial.rows.size() << " parallel=8 warnings="
+              << adapter_parallel.warning_count << " rows=" << adapter_parallel.rows.size()
+              << " donor_warnings=" << donor_serial.warning_count << " donor_rows=" << donor_serial.rows.size()
+              << " max_block_size=1 end_with_output=0 parity=ok" << std::endl;
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
     BuildOuterHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
 {
     ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
@@ -1071,6 +1173,50 @@ TEST_F(
               << " rows=" << adapter_serial.rows.size() << " parallel=8 warnings=" << adapter_parallel.warning_count
               << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
               << " donor_rows=" << donor_serial.rows.size() << " max_block_size=1 parity=ok" << std::endl;
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
+    ProbeOuterHashJoinPayloadFanoutParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeProbeOuterJoinFanout(1);
+    auto donor_parallel = runDonorNativeProbeOuterJoinFanout(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterProbeOuterJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        fanoutProbeOuterBuildRows(),
+        fanoutProbeOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterProbeOuterJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        fanoutProbeOuterBuildRows(),
+        fanoutProbeOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), 8u);
+
+    std::cout << "[tiforth-host-v2-probe-outer-join-fanout-legacy-end] serial=8 warnings="
+              << adapter_serial.warning_count << " rows=" << adapter_serial.rows.size() << " parallel=8 warnings="
+              << adapter_parallel.warning_count << " rows=" << adapter_parallel.rows.size()
+              << " donor_warnings=" << donor_serial.warning_count << " donor_rows=" << donor_serial.rows.size()
+              << " max_block_size=1 end_with_output=0 parity=ok" << std::endl;
 }
 
 TEST_F(
