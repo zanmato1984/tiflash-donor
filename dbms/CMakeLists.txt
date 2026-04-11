@@ -356,15 +356,18 @@ if (ENABLE_TESTS)
         "tiforth_ffi_c"
         CACHE STRING
               "Library name used with TIFORTH_FFI_C_LIB_DIR for TiForth host-v2 linked donor adapter gtests")
+    set(_tiforth_host_v2_gtest_sources
+        ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_cast.cpp
+        ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_inner_hash_join.cpp)
 
-    # attach all dbms gtest sources
+    # Attach all dbms gtest sources except host-v2 proving files.
+    # Those proving files are built only via the dedicated linked target below
+    # to avoid duplicate compilation and mixed-path execution.
     grep_gtest_sources(${TiFlash_SOURCE_DIR}/dbms dbms_gtest_sources)
-    if (NOT ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
-        list(
-            FILTER dbms_gtest_sources
-            EXCLUDE
-            REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
-    endif ()
+    list(
+        FILTER dbms_gtest_sources
+        EXCLUDE
+        REGEX "^src/Functions/tests/gtest_tiforth_execution_host_v2_.*\\.cpp$")
     add_executable(gtests_dbms EXCLUDE_FROM_ALL
         ${dbms_gtest_sources}
         ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
@@ -459,8 +462,14 @@ if (ENABLE_TESTS)
             tiforth_execution_host_v2_finish
             tiforth_execution_host_v2_release_executable
             tiforth_execution_host_v2_release_instance)
+        set(_tiforth_nm_args -g)
+        if (APPLE)
+            list(APPEND _tiforth_nm_args -U)
+        else ()
+            list(APPEND _tiforth_nm_args --defined-only)
+        endif ()
         execute_process(
-            COMMAND "${CMAKE_NM}" -g "${_tiforth_ffi_c_link_target}"
+            COMMAND "${CMAKE_NM}" ${_tiforth_nm_args} "${_tiforth_ffi_c_link_target}"
             RESULT_VARIABLE _tiforth_nm_result
             OUTPUT_VARIABLE _tiforth_nm_output
             ERROR_VARIABLE _tiforth_nm_error)
@@ -478,24 +487,57 @@ if (ENABLE_TESTS)
             if ("${_tiforth_symbol_match}" STREQUAL "")
                 message(
                     FATAL_ERROR
-                        "${_tiforth_ffi_c_link_target} is missing required host-v2 symbol `${_tiforth_symbol}`; "
+                        "${_tiforth_ffi_c_link_target} is missing required defined host-v2 symbol `${_tiforth_symbol}`; "
                         "choose a libtiforth_ffi_c build that exports host-v2 entrypoints.")
             endif ()
         endforeach ()
 
-        target_compile_definitions(gtests_dbms PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
-        target_link_libraries(gtests_dbms "${_tiforth_ffi_c_link_target}")
+        add_executable(gtests_tiforth_execution_host_v2 EXCLUDE_FROM_ALL
+            ${_tiforth_host_v2_gtest_sources}
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/UserConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/RaftConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/AggregateFunctions/AggregateFunctionSum.cpp
+        )
+        target_include_directories(gtests_tiforth_execution_host_v2 BEFORE PRIVATE ${SPARCEHASH_INCLUDE_DIR})
+        target_compile_definitions(gtests_tiforth_execution_host_v2 PUBLIC DBMS_PUBLIC_GTEST)
+        target_compile_definitions(gtests_tiforth_execution_host_v2 PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
+        target_link_libraries(
+            gtests_tiforth_execution_host_v2
+            test_util_gtest_main
+            tiflash_functions
+            tiflash-dttool-lib
+            delta_merge
+            kvstore
+            "${_tiforth_ffi_c_link_target}")
+        target_compile_options(gtests_tiforth_execution_host_v2 PRIVATE -Wno-unknown-pragmas -Wno-deprecated-copy)
+        add_target_pch("pch-dbms.h" gtests_tiforth_execution_host_v2)
         message(
             STATUS
-                "TiForth host-v2 linked donor adapter tests: gtests_dbms links ${_tiforth_ffi_c_link_target}")
+                "TiForth host-v2 linked donor adapter tests: "
+                "gtests_tiforth_execution_host_v2 links ${_tiforth_ffi_c_link_target}")
         message(
             STATUS
                 "TiForth host-v2 linked donor adapter strict run: "
                 "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 ctest --test-dir ${CMAKE_BINARY_DIR} "
-                "-R TestTiforthExecutionHostV2 --output-on-failure")
+                "-R TestTiforthExecutionHostV2LinkedStrict --output-on-failure")
+        message(
+            STATUS
+                "TiForth host-v2 linked donor adapter bootstrap: "
+                "./dbms/src/Functions/tests/bootstrap_tiforth_host_v2_linked_submodules.sh")
+        add_test(
+            NAME TestTiforthExecutionHostV2LinkedStrict
+            COMMAND
+                "${CMAKE_COMMAND}" -E env TIFORTH_REQUIRE_RUNTIME_EXECUTION=1
+                "$<TARGET_FILE:gtests_tiforth_execution_host_v2>"
+                "--gtest_filter=TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*")
+        set_tests_properties(
+            TestTiforthExecutionHostV2LinkedStrict
+            PROPERTIES
+                WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")
-            set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
-            set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
+            set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY BUILD_RPATH "${_tiforth_ffi_c_rpath_dir}")
+            set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY INSTALL_RPATH "${_tiforth_ffi_c_rpath_dir}")
         endif ()
     endif ()
 
@@ -534,6 +576,10 @@ if (ENABLE_TESTS)
 
     set_property(TARGET gtests_dbms APPEND PROPERTY BUILD_RPATH "$ORIGIN/")
     set_property(TARGET gtests_dbms APPEND PROPERTY INSTALL_RPATH "$ORIGIN/")
+    if (TARGET gtests_tiforth_execution_host_v2)
+        set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY BUILD_RPATH "$ORIGIN/")
+        set_property(TARGET gtests_tiforth_execution_host_v2 APPEND PROPERTY INSTALL_RPATH "$ORIGIN/")
+    endif ()
 
     if (ENABLE_CLARA)
         install (SCRIPT ${TiFlash_SOURCE_DIR}/libs/libclara-cmake/linux_post_install.cmake COMPONENT tiflash-gtest)

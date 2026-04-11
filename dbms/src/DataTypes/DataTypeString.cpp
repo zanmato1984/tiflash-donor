@@ -351,9 +351,6 @@ PaddedPODArray<Offset> offsetToStrSize(
     PaddedPODArray<Offset> str_sizes(end - begin);
     auto chars_offsets_pos = chars_offsets.begin() + begin;
 
-    // clang-format off
-    #pragma clang loop vectorize(enable)
-    // clang-format on
     for (ssize_t i = 0; i < static_cast<ssize_t>(str_sizes.size()); ++i)
     {
         str_sizes[i] = chars_offsets_pos[i] - chars_offsets_pos[i - 1];
