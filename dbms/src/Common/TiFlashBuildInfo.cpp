@@ -83,7 +83,7 @@ String getEnabledFeatures()
 // sm4
 #if USE_GM_SSL
             "sm4(GmSSL)",
-#elif OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM4)
+#elif OPENSSL_VERSION_NUMBER >= 0x1010100fL && !defined(OPENSSL_NO_SM4) && !defined(OPENSSL_IS_BORINGSSL)
             "sm4(OpenSSL)",
 #endif
 

@@ -7,8 +7,8 @@ adapter proving tests:
 - `gtest_tiforth_execution_host_v2_inner_hash_join.cpp`
 
 Runtime symbol dispatch (`dlopen` / `dlsym`) is not used on this path.
-These host-v2 proving tests are compiled into `gtests_dbms` and
-`gtests_tiforth_execution_host_v2` when
+These host-v2 proving tests are compiled into
+`gtests_tiforth_execution_host_v2` only when
 `-DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON` is set.
 
 ## Bootstrap submodules (fresh donor worktree)
@@ -24,6 +24,8 @@ the linked proving binaries) with:
 ## Configure
 
 Choose one linked-library input mode and keep the path absolute.
+When linked tests are enabled, CMake also requires `CMAKE_NM` so host-v2
+symbols can be preflighted before `gtests_tiforth_execution_host_v2` is wired.
 
 ### Mode A: direct library path
 

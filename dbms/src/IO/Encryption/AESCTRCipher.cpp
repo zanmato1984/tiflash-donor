@@ -48,7 +48,7 @@
 
 #endif
 
-#if (USE_GM_SSL == 0) && !defined(OPENSSL_NO_SM4)
+#if (USE_GM_SSL == 0) && !defined(OPENSSL_NO_SM4) && !defined(OPENSSL_IS_BORINGSSL)
 // TODO: OpenSSL Lib does not export SM4_BLOCK_SIZE by now.
 // Need to remove SM4_BLOCK_SIZE once Openssl lib support the definition.
 // SM4 uses 128-bit block size as AES.
@@ -90,7 +90,7 @@ size_t blockSize(EncryptionMethod method)
         // SM4 uses 128-bit block size as AES.
         // Ref: https://github.com/openssl/openssl/blob/OpenSSL_1_1_1-stable/include/crypto/sm4.h#L24
         return 16;
-#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4)
+#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4) || defined(OPENSSL_IS_BORINGSSL)
         throw DB::TiFlashException(
             Errors::Encryption::Internal,
             "Do not support encryption method SM4Ctr when using OpenSSL and the version is less than 1.1.1");
@@ -117,7 +117,7 @@ const EVP_CIPHER * getCipher(EncryptionMethod method)
 #if USE_GM_SSL
         // Use sm4 in GmSSL, return nullptr
         return nullptr;
-#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4)
+#elif OPENSSL_VERSION_NUMBER < 0x1010100fL || defined(OPENSSL_NO_SM4) || defined(OPENSSL_IS_BORINGSSL)
         throw DB::TiFlashException(
             Errors::Encryption::Internal,
             "Do not support encryption method SM4Ctr when using OpenSSL and the version is less than 1.1.1");

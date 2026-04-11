@@ -121,6 +121,15 @@ check_then_add_sources_compile_flag (
     src/Storages/DeltaMerge/DMVersionFilterBlockInputStream.cpp
 )
 
+# Apple clang 17 can report loop-vectorize transform failures in
+# DataTypeString.cpp; keep this source buildable under global -Werror.
+check_cxx_compiler_flag("-Wno-error=pass-failed" COMPILER_SUPPORT_NO_ERROR_PASS_FAILED)
+check_then_add_sources_compile_flag (
+    COMPILER_SUPPORT_NO_ERROR_PASS_FAILED
+    "-Wno-error=pass-failed"
+    src/DataTypes/DataTypeString.cpp
+)
+
 list (APPEND tiflash_common_io_sources ${CONFIG_BUILD})
 list (APPEND tiflash_common_io_headers ${CONFIG_VERSION} ${CONFIG_COMMON})
 list (APPEND tiflash_common_io_headers ${fiu_include_dirs})
@@ -285,6 +294,8 @@ if (NOT USE_INTERNAL_LZ4_LIBRARY)
 endif ()
 if (NOT USE_INTERNAL_ZSTD_LIBRARY)
     target_include_directories (dbms BEFORE PRIVATE ${ZSTD_INCLUDE_DIR})
+else ()
+    target_include_directories (dbms BEFORE PRIVATE ${TiFlash_SOURCE_DIR}/contrib/zstd/lib)
 endif ()
 
 if (USE_QPL)
@@ -356,7 +367,8 @@ if (ENABLE_TESTS)
         "tiforth_ffi_c"
         CACHE STRING
               "Library name used with TIFORTH_FFI_C_LIB_DIR for TiForth host-v2 linked donor adapter gtests")
-    set(_tiforth_host_v2_gtest_sources
+    set(
+        _tiforth_host_v2_gtest_sources
         ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_cast.cpp
         ${TiFlash_SOURCE_DIR}/dbms/src/Functions/tests/gtest_tiforth_execution_host_v2_inner_hash_join.cpp)
 
@@ -382,6 +394,17 @@ if (ENABLE_TESTS)
 
     target_link_libraries(gtests_dbms test_util_gtest_main tiflash_functions tiflash-dttool-lib delta_merge kvstore)
     if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
+        add_executable(
+            gtests_tiforth_execution_host_v2
+            EXCLUDE_FROM_ALL
+            ${_tiforth_host_v2_gtest_sources}
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/UserConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/Server/RaftConfigParser.cpp
+            ${TiFlash_SOURCE_DIR}/dbms/src/AggregateFunctions/AggregateFunctionSum.cpp)
+        target_include_directories(gtests_tiforth_execution_host_v2 BEFORE PRIVATE ${SPARCEHASH_INCLUDE_DIR})
+        target_compile_definitions(gtests_tiforth_execution_host_v2 PUBLIC DBMS_PUBLIC_GTEST)
+
         set(_tiforth_ffi_c_link_target "")
         set(_tiforth_ffi_c_rpath_dir "")
         if (NOT "${TIFORTH_FFI_C_LIBRARY}" STREQUAL "" AND NOT "${TIFORTH_FFI_C_LIB_DIR}" STREQUAL "")
@@ -492,15 +515,6 @@ if (ENABLE_TESTS)
             endif ()
         endforeach ()
 
-        add_executable(gtests_tiforth_execution_host_v2 EXCLUDE_FROM_ALL
-            ${_tiforth_host_v2_gtest_sources}
-            ${TiFlash_SOURCE_DIR}/dbms/src/Server/StorageConfigParser.cpp
-            ${TiFlash_SOURCE_DIR}/dbms/src/Server/UserConfigParser.cpp
-            ${TiFlash_SOURCE_DIR}/dbms/src/Server/RaftConfigParser.cpp
-            ${TiFlash_SOURCE_DIR}/dbms/src/AggregateFunctions/AggregateFunctionSum.cpp
-        )
-        target_include_directories(gtests_tiforth_execution_host_v2 BEFORE PRIVATE ${SPARCEHASH_INCLUDE_DIR})
-        target_compile_definitions(gtests_tiforth_execution_host_v2 PUBLIC DBMS_PUBLIC_GTEST)
         target_compile_definitions(gtests_tiforth_execution_host_v2 PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
         target_link_libraries(
             gtests_tiforth_execution_host_v2
@@ -510,8 +524,6 @@ if (ENABLE_TESTS)
             delta_merge
             kvstore
             "${_tiforth_ffi_c_link_target}")
-        target_compile_options(gtests_tiforth_execution_host_v2 PRIVATE -Wno-unknown-pragmas -Wno-deprecated-copy)
-        add_target_pch("pch-dbms.h" gtests_tiforth_execution_host_v2)
         message(
             STATUS
                 "TiForth host-v2 linked donor adapter tests: "
@@ -563,6 +575,13 @@ if (ENABLE_TESTS)
     if (USE_GM_SSL)
         target_link_libraries(gtests_dbms gmssl)
         target_include_directories(gtests_dbms PRIVATE ${TiFlash_SOURCE_DIR}/contrib/GmSSL/include)
+        if (TARGET gtests_tiforth_execution_host_v2)
+            target_link_libraries(gtests_tiforth_execution_host_v2 gmssl)
+            target_include_directories(
+                gtests_tiforth_execution_host_v2
+                PRIVATE
+                    ${TiFlash_SOURCE_DIR}/contrib/GmSSL/include)
+        endif ()
         install (TARGETS gmssl
                 COMPONENT tiflash-gtest
                 DESTINATION ".")
@@ -587,8 +606,19 @@ if (ENABLE_TESTS)
 
     target_compile_options(gtests_dbms PRIVATE -Wno-unknown-pragmas -Wno-deprecated-copy)
     add_check(gtests_dbms)
+    if (TARGET gtests_tiforth_execution_host_v2)
+        target_compile_options(
+            gtests_tiforth_execution_host_v2
+            PRIVATE
+                -Wno-unknown-pragmas
+                -Wno-deprecated-copy)
+        add_check(gtests_tiforth_execution_host_v2)
+    endif ()
 
     add_target_pch("pch-dbms.h" gtests_dbms)
+    if (TARGET gtests_tiforth_execution_host_v2)
+        add_target_pch("pch-dbms.h" gtests_tiforth_execution_host_v2)
+    endif ()
     grep_bench_sources(${TiFlash_SOURCE_DIR}/dbms dbms_bench_sources)
     add_executable(bench_dbms EXCLUDE_FROM_ALL
         ${dbms_bench_sources}
