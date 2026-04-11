@@ -195,6 +195,20 @@ public:
 
         context.addMockTable(
             "tiforth_host_v2",
+            "null_fanout_inner_build_input",
+            {{"join_key", TiDB::TP::TypeString}, {"build_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", {"k", "k", "x", "x", {}}),
+             toNullableVec<Int64>("build_payload", {10, 11, 20, 21, 30})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
+            "null_fanout_inner_probe_input",
+            {{"join_key", TiDB::TP::TypeString}, {"probe_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", {"k", "k", "x", {}, "y"}),
+             toNullableVec<Int64>("probe_payload", {100, 101, 200, 300, 400})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
             "build_outer_build_input",
             {{"join_key", TiDB::TP::TypeLongLong}, {"build_payload", TiDB::TP::TypeLongLong}},
             {toNullableVec<Int64>("join_key", {1, 1, 5, 7}),
@@ -320,6 +334,14 @@ public:
     DonorRunResult runDonorNativeInnerJoinFanout(size_t concurrency)
     {
         return runDonorNativeInnerJoinWithInputs(concurrency, "fanout_probe_input", "fanout_build_input");
+    }
+
+    DonorRunResult runDonorNativeInnerJoinNullFanout(size_t concurrency)
+    {
+        return runDonorNativeInnerJoinWithInputs(
+            concurrency,
+            "null_fanout_inner_probe_input",
+            "null_fanout_inner_build_input");
     }
 
     DonorRunResult runDonorNativeInnerJoinDisjoint(size_t concurrency)
@@ -458,6 +480,28 @@ public:
             {String("x"), 200},
             {String("y"), 300},
             {std::nullopt, 400},
+        };
+    }
+
+    static std::vector<JoinInputRow> nullFanoutInnerJoinBuildRows()
+    {
+        return {
+            {String("k"), 10},
+            {String("k"), 11},
+            {String("x"), 20},
+            {String("x"), 21},
+            {std::nullopt, 30},
+        };
+    }
+
+    static std::vector<JoinInputRow> nullFanoutInnerJoinProbeRows()
+    {
+        return {
+            {String("k"), 100},
+            {String("k"), 101},
+            {String("x"), 200},
+            {std::nullopt, 300},
+            {String("y"), 400},
         };
     }
 
@@ -1035,6 +1079,44 @@ TEST_F(
     ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
     ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
     ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
+    InnerHashJoinPayloadNullFanoutParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeInnerJoinNullFanout(1);
+    auto donor_parallel = runDonorNativeInnerJoinNullFanout(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        nullFanoutInnerJoinBuildRows(),
+        nullFanoutInnerJoinProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        nullFanoutInnerJoinBuildRows(),
+        nullFanoutInnerJoinProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), 6u);
 }
 
 TEST_F(
