@@ -481,6 +481,20 @@ public:
 
         context.addMockTable(
             "tiforth_host_v2",
+            "fanout_build_input",
+            {{"join_key", TiDB::TP::TypeString}, {"build_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", {"k", "k", "k", "x", "z", {}}),
+             toNullableVec<Int64>("build_payload", {10, 11, 12, 20, 30, 40})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
+            "fanout_probe_input",
+            {{"join_key", TiDB::TP::TypeString}, {"probe_payload", TiDB::TP::TypeLongLong}},
+            {toNullableVec<String>("join_key", {"k", "k", "x", "y", {}}),
+             toNullableVec<Int64>("probe_payload", {100, 101, 200, 300, 400})});
+
+        context.addMockTable(
+            "tiforth_host_v2",
             "build_outer_build_input",
             {{"join_key", TiDB::TP::TypeLongLong}, {"build_payload", TiDB::TP::TypeLongLong}},
             {toNullableVec<Int64>("join_key", {1, 1, 5, 7}),
@@ -508,12 +522,15 @@ public:
              toNullableVec<Int64>("probe_payload", {100, 200, 300, 500})});
     }
 
-    DonorRunResult runDonorNativeInnerJoin(size_t concurrency)
+    DonorRunResult runDonorNativeInnerJoinWithInputs(
+        size_t concurrency,
+        const char * probe_table,
+        const char * build_table)
     {
         getDAGContext().clearWarnings();
-        auto request = context.scan("tiforth_host_v2", "probe_input")
+        auto request = context.scan("tiforth_host_v2", probe_table)
                            .join(
-                               context.scan("tiforth_host_v2", "build_input"),
+                               context.scan("tiforth_host_v2", build_table),
                                tipb::JoinType::TypeInnerJoin,
                                {col("join_key")})
                            .project({"build_payload", "probe_payload"})
@@ -523,6 +540,16 @@ public:
         result.rows = canonicalizeRows(joinRowsFromColumns(executeStreams(request, concurrency)));
         result.warning_count = getDAGContext().getWarningCount();
         return result;
+    }
+
+    DonorRunResult runDonorNativeInnerJoin(size_t concurrency)
+    {
+        return runDonorNativeInnerJoinWithInputs(concurrency, "probe_input", "build_input");
+    }
+
+    DonorRunResult runDonorNativeInnerJoinFanout(size_t concurrency)
+    {
+        return runDonorNativeInnerJoinWithInputs(concurrency, "fanout_probe_input", "fanout_build_input");
     }
 
     DonorRunResult runDonorNativeBuildOuterJoin(size_t concurrency)
@@ -575,6 +602,29 @@ public:
             {String("k"), 100},
             {String("x"), 200},
             {String("z"), 300},
+            {std::nullopt, 400},
+        };
+    }
+
+    static std::vector<JoinInputRow> fanoutInnerJoinBuildRows()
+    {
+        return {
+            {String("k"), 10},
+            {String("k"), 11},
+            {String("k"), 12},
+            {String("x"), 20},
+            {String("z"), 30},
+            {std::nullopt, 40},
+        };
+    }
+
+    static std::vector<JoinInputRow> fanoutInnerJoinProbeRows()
+    {
+        return {
+            {String("k"), 100},
+            {String("k"), 101},
+            {String("x"), 200},
+            {String("y"), 300},
             {std::nullopt, 400},
         };
     }
@@ -1069,6 +1119,44 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityHighPa
     ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
 
     std::cout << "[tiforth-host-v2-inner-join-high-partition] serial=8 warnings=" << adapter_serial.warning_count
+              << " rows=" << adapter_serial.rows.size() << " parallel=8 warnings=" << adapter_parallel.warning_count
+              << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
+              << " donor_rows=" << donor_serial.rows.size() << " max_block_size=1 parity=ok" << std::endl;
+}
+
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadFanoutParityHighPartitionMaxBlockSerialAndParallel)
+{
+    auto donor_serial = runDonorNativeInnerJoinFanout(1);
+    auto donor_parallel = runDonorNativeInnerJoinFanout(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        fanoutInnerJoinBuildRows(),
+        fanoutInnerJoinProbeRows(),
+        1,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterInnerJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        fanoutInnerJoinBuildRows(),
+        fanoutInnerJoinProbeRows(),
+        1,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), 7u);
+
+    std::cout << "[tiforth-host-v2-inner-join-fanout] serial=8 warnings=" << adapter_serial.warning_count
               << " rows=" << adapter_serial.rows.size() << " parallel=8 warnings=" << adapter_parallel.warning_count
               << " rows=" << adapter_parallel.rows.size() << " donor_warnings=" << donor_serial.warning_count
               << " donor_rows=" << donor_serial.rows.size() << " max_block_size=1 parity=ok" << std::endl;
