@@ -173,7 +173,8 @@ CastRunResult runCastUtf8ToDecimal(
     uint32_t ownership_mode,
     uint32_t sql_mode,
     uint8_t decimal_precision,
-    int8_t decimal_scale);
+    int8_t decimal_scale,
+    uint32_t max_block_size = 0);
 
 JoinRunResult runJoinUtf8KeyInt64Payload(
     const TiforthExecutionHostV2Api & api,
