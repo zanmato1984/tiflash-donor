@@ -32,6 +32,10 @@ add_library(tiflash_functions ${tiflash_functions_sources})
 
 target_link_libraries(tiflash_functions PUBLIC dbms PRIVATE ${FARMHASH_LIBRARIES} ${METROHASH_LIBRARIES})
 
+if (ENABLE_TIFORTH_HOST_V2_LINKED_TESTS)
+    target_compile_definitions(tiflash_functions PRIVATE TIFORTH_HOST_V2_LINKED_TESTS=1)
+endif ()
+
 target_include_directories (tiflash_functions BEFORE PUBLIC ${TiFlash_SOURCE_DIR}/contrib/libfarmhash)
 target_include_directories (tiflash_functions BEFORE PUBLIC ${TiFlash_SOURCE_DIR}/contrib/libmetrohash/src)
 target_include_directories (tiflash_functions BEFORE PUBLIC ${DIVIDE_INCLUDE_DIR})
