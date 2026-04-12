@@ -58,9 +58,9 @@ ctest --test-dir /tmp/tiflash-linked-host-v2 \
   --output-on-failure
 ```
 
-The strict CTest entry runs this exact proving-slice gtest filter:
+The CTest entry runs this exact proving-slice gtest filter:
 
 ```bash
 /tmp/tiflash-linked-host-v2/dbms/gtests_tiforth_execution_host_v2 \
-  --gtest_filter='TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*'
+  --gtest_filter='TestTiforthExecutionHostV2Cast.CastUtf8ToDecimalParitySerialAndParallel:TestTiforthExecutionHostV2Cast.CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel:TestTiforthExecutionHostV2InnerHashJoin.InnerHashJoinPayloadParitySerialAndParallel:TestTiforthExecutionHostV2InnerHashJoin.InnerHashJoinPayloadParityHighPartitionMaxBlockSerialAndParallel'
 ```

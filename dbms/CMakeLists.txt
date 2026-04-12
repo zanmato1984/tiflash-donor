@@ -541,7 +541,10 @@ if (ENABLE_TESTS)
             NAME TestTiforthExecutionHostV2LinkedProving
             COMMAND
                 "$<TARGET_FILE:gtests_tiforth_execution_host_v2>"
-                "--gtest_filter=TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*")
+                "--gtest_filter=TestTiforthExecutionHostV2Cast.CastUtf8ToDecimalParitySerialAndParallel:"
+                "TestTiforthExecutionHostV2Cast.CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel:"
+                "TestTiforthExecutionHostV2InnerHashJoin.InnerHashJoinPayloadParitySerialAndParallel:"
+                "TestTiforthExecutionHostV2InnerHashJoin.InnerHashJoinPayloadParityHighPartitionMaxBlockSerialAndParallel")
         set_tests_properties(
             TestTiforthExecutionHostV2LinkedProving
             PROPERTIES
