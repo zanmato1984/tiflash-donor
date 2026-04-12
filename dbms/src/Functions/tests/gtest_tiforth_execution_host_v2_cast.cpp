@@ -290,6 +290,51 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroPar
               << std::endl;
 }
 
+TEST_F(
+    TestTiforthExecutionHostV2Cast,
+    CastUtf8ToDecimalMalformedMultiDotZeroParityIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
+    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
+    String load_error;
+    auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
+    if (!maybe_api.has_value())
+    {
+        if (strict_runtime_execution)
+            GTEST_FAIL() << load_error;
+        SUCCEED() << load_error;
+        return;
+    }
+
+    auto api = std::move(maybe_api.value());
+    auto & dag_context = getDAGContext();
+    ScopedDAGFlags scoped_dag_flags(dag_context);
+    dag_context.addFlag(TiDBSQLFlags::TRUNCATE_AS_WARNING);
+
+    const std::vector<std::optional<String>> input = {
+        String("1.2.3"),
+        String("bad"),
+        String("12.340"),
+        String("-0.500"),
+        std::nullopt,
+        String(""),
+    };
+
+    auto donor_native = runDonorNativeCastAsString(input);
+    const auto donor_warning_count = static_cast<uint32_t>(dag_context.getWarningCount());
+    ASSERT_EQ(donor_warning_count, 0u);
+
+    auto serial = runAdapterCast(api, input, 1, Tiforth::BATCH_OWNERSHIP_BORROW_WITHIN_CALL);
+    auto parallel = runAdapterCast(api, input, 2, Tiforth::BATCH_OWNERSHIP_FOREIGN_RETAINABLE);
+
+    ASSERT_EQ(serial.warning_count, donor_warning_count);
+    ASSERT_EQ(parallel.warning_count, donor_warning_count);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(serial.output), donor_native);
+    ASSERT_COLUMN_EQ(createColumn<Nullable<String>>(parallel.output), donor_native);
+}
+
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedSignedMultiDotZeroParitySerialAndParallel)
 {
     const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
