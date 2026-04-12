@@ -530,21 +530,23 @@ if (ENABLE_TESTS)
                 "gtests_tiforth_execution_host_v2 links ${_tiforth_ffi_c_link_target}")
         message(
             STATUS
-                "TiForth host-v2 linked donor adapter strict run: "
-                "TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 ctest --test-dir ${CMAKE_BINARY_DIR} "
-                "-R TestTiforthExecutionHostV2LinkedStrict --output-on-failure")
+                "TiForth host-v2 linked donor adapter proving run: "
+                "ctest --test-dir ${CMAKE_BINARY_DIR} "
+                "-R TestTiforthExecutionHostV2LinkedProving --output-on-failure")
         message(
             STATUS
                 "TiForth host-v2 linked donor adapter bootstrap: "
                 "./dbms/src/Functions/tests/bootstrap_tiforth_host_v2_linked_submodules.sh")
         add_test(
-            NAME TestTiforthExecutionHostV2LinkedStrict
+            NAME TestTiforthExecutionHostV2LinkedProving
             COMMAND
-                "${CMAKE_COMMAND}" -E env TIFORTH_REQUIRE_RUNTIME_EXECUTION=1
                 "$<TARGET_FILE:gtests_tiforth_execution_host_v2>"
-                "--gtest_filter=TestTiforthExecutionHostV2Cast.*:TestTiforthExecutionHostV2InnerHashJoin.*")
+                "--gtest_filter=TestTiforthExecutionHostV2Cast.CastUtf8ToDecimalParitySerialAndParallel:"
+                "TestTiforthExecutionHostV2Cast.CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel:"
+                "TestTiforthExecutionHostV2InnerHashJoin.InnerHashJoinPayloadParitySerialAndParallel:"
+                "TestTiforthExecutionHostV2InnerHashJoin.InnerHashJoinPayloadParityHighPartitionMaxBlockSerialAndParallel")
         set_tests_properties(
-            TestTiforthExecutionHostV2LinkedStrict
+            TestTiforthExecutionHostV2LinkedProving
             PROPERTIES
                 WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
         if (NOT "${_tiforth_ffi_c_rpath_dir}" STREQUAL "")

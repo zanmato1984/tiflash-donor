@@ -16,7 +16,6 @@
 
 #include <algorithm>
 #include <cstddef>
-#include <cstdlib>
 #include <cstring>
 #include <fmt/core.h>
 #include <stdexcept>
@@ -570,12 +569,6 @@ std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error)
           "-DTIFORTH_FFI_C_LIBRARY=/abs/path/to/libtiforth_ffi_c.<so|dylib> to run this donor adapter test";
     return std::nullopt;
 #endif
-}
-
-bool requiresStrictRuntimeExecution()
-{
-    const char * configured = std::getenv("TIFORTH_REQUIRE_RUNTIME_EXECUTION");
-    return configured != nullptr && configured[0] != '\0' && configured[0] != '0';
 }
 
 CastRunResult runCastUtf8ToDecimal(

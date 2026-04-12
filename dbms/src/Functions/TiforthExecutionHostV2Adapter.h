@@ -148,7 +148,6 @@ struct TiforthExecutionHostV2Api
 };
 
 std::optional<TiforthExecutionHostV2Api> loadExecutionHostV2Api(String & error);
-bool requiresStrictRuntimeExecution();
 
 using Utf8Int64Row = std::pair<std::optional<String>, std::optional<int64_t>>;
 using Int64Int64Row = std::pair<std::optional<int64_t>, std::optional<int64_t>>;

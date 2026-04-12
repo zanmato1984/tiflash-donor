@@ -16,7 +16,6 @@
 #include <TestUtils/FunctionTestUtils.h>
 #include <gtest/gtest.h>
 
-#include <cstdlib>
 #include <iostream>
 
 namespace DB::tests
@@ -25,36 +24,10 @@ namespace
 {
 
 constexpr const char * FUNC_NAME_TIDB_CAST = "tidb_cast";
-constexpr const char * BOGUS_RUNTIME_DYLIB_PATH = "/tmp/tiforth_host_v2_linked_tests_should_not_use_runtime_dispatch.dylib";
 
-class ScopedRuntimeDylibEnvOverride
-{
-public:
-    explicit ScopedRuntimeDylibEnvOverride(const char * value)
-    {
-        if (const char * current = std::getenv("TIFORTH_FFI_C_DYLIB"); current != nullptr)
-        {
-            had_previous_value = true;
-            previous_value = current;
-        }
-        applied = (::setenv("TIFORTH_FFI_C_DYLIB", value, 1) == 0);
-    }
-
-    ~ScopedRuntimeDylibEnvOverride()
-    {
-        if (had_previous_value)
-            (void)::setenv("TIFORTH_FFI_C_DYLIB", previous_value.c_str(), 1);
-        else
-            (void)::unsetenv("TIFORTH_FFI_C_DYLIB");
-    }
-
-    bool ok() const { return applied; }
-
-private:
-    bool had_previous_value = false;
-    bool applied = false;
-    String previous_value;
-};
+#if !defined(TIFORTH_HOST_V2_LINKED_TESTS)
+#error "build gtests_tiforth_execution_host_v2 (or gtests_dbms) with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
+#endif
 
 class ScopedDAGFlags
 {
@@ -105,17 +78,9 @@ public:
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -147,22 +112,11 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParitySerialAndParallel)
               << " donor_warnings=" << donor_warning_count << " parity=ok" << std::endl;
 }
 
-TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParityIgnoresRuntimeDylibEnvSerialAndParallel)
+TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -191,17 +145,9 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalParityIgnoresRuntimeDyli
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -236,17 +182,9 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalScaleLossWarningParitySe
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -292,22 +230,11 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedMultiDotZeroPar
 
 TEST_F(
     TestTiforthExecutionHostV2Cast,
-    CastUtf8ToDecimalMalformedMultiDotZeroParityIgnoresRuntimeDylibEnvSerialAndParallel)
+    CastUtf8ToDecimalMalformedMultiDotZeroParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -337,17 +264,9 @@ TEST_F(
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedSignedMultiDotZeroParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -393,22 +312,11 @@ TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalMalformedSignedMultiDotZ
 
 TEST_F(
     TestTiforthExecutionHostV2Cast,
-    CastUtf8ToDecimalMalformedSignedMultiDotZeroParityIgnoresRuntimeDylibEnvSerialAndParallel)
+    CastUtf8ToDecimalMalformedSignedMultiDotZeroParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -438,22 +346,11 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2Cast,
-    CastUtf8ToDecimalScaleLossWarningParityIgnoresRuntimeDylibEnvSerialAndParallel)
+    CastUtf8ToDecimalScaleLossWarningParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -482,22 +379,11 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2Cast,
-    CastUtf8ToDecimalInvalidSyntaxWarningParityIgnoresRuntimeDylibEnvSerialAndParallel)
+    CastUtf8ToDecimalInvalidSyntaxWarningParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
@@ -529,17 +415,9 @@ TEST_F(
 
 TEST_F(TestTiforthExecutionHostV2Cast, CastUtf8ToDecimalInvalidSyntaxWarningParitySerialAndParallel)
 {
-    const bool strict_runtime_execution = Tiforth::requiresStrictRuntimeExecution();
     String load_error;
     auto maybe_api = Tiforth::loadExecutionHostV2Api(load_error);
-    if (!maybe_api.has_value())
-    {
-        if (strict_runtime_execution)
-            GTEST_FAIL() << load_error;
-        SUCCEED() << load_error;
-        return;
-    }
-
+    ASSERT_TRUE(maybe_api.has_value()) << load_error;
     auto api = std::move(maybe_api.value());
     auto & dag_context = getDAGContext();
     ScopedDAGFlags scoped_dag_flags(dag_context);
