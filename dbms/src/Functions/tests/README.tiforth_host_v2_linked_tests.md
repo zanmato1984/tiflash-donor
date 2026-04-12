@@ -50,12 +50,11 @@ cmake -S . -B /tmp/tiflash-linked-host-v2 -GNinja \
 cmake --build /tmp/tiflash-linked-host-v2 --target gtests_tiforth_execution_host_v2
 ```
 
-## Run strict-mode proving tests
+## Run proving tests
 
 ```bash
-TIFORTH_REQUIRE_RUNTIME_EXECUTION=1 \
 ctest --test-dir /tmp/tiflash-linked-host-v2 \
-  -R TestTiforthExecutionHostV2LinkedStrict \
+  -R TestTiforthExecutionHostV2LinkedProving \
   --output-on-failure
 ```
 

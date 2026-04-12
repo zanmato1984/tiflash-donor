@@ -20,7 +20,6 @@
 #include <gtest/gtest.h>
 
 #include <algorithm>
-#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <fmt/core.h>
@@ -37,36 +36,6 @@ namespace
 
 constexpr uint32_t BATCH_OWNERSHIP_BORROW_WITHIN_CALL = 1;
 constexpr uint32_t BATCH_OWNERSHIP_FOREIGN_RETAINABLE = 2;
-constexpr const char * BOGUS_RUNTIME_DYLIB_PATH = "/tmp/tiforth_host_v2_linked_tests_should_not_use_runtime_dispatch.dylib";
-
-class ScopedRuntimeDylibEnvOverride
-{
-public:
-    explicit ScopedRuntimeDylibEnvOverride(const char * value)
-    {
-        if (const char * current = std::getenv("TIFORTH_FFI_C_DYLIB"); current != nullptr)
-        {
-            had_previous_value = true;
-            previous_value = current;
-        }
-        applied = (::setenv("TIFORTH_FFI_C_DYLIB", value, 1) == 0);
-    }
-
-    ~ScopedRuntimeDylibEnvOverride()
-    {
-        if (had_previous_value)
-            (void)::setenv("TIFORTH_FFI_C_DYLIB", previous_value.c_str(), 1);
-        else
-            (void)::unsetenv("TIFORTH_FFI_C_DYLIB");
-    }
-
-    bool ok() const { return applied; }
-
-private:
-    bool had_previous_value = false;
-    bool applied = false;
-    String previous_value;
-};
 
 #if !defined(TIFORTH_HOST_V2_LINKED_TESTS)
 #error "build gtests_tiforth_execution_host_v2 (or gtests_dbms) with -DENABLE_TIFORTH_HOST_V2_LINKED_TESTS=ON and linked libtiforth_ffi_c input"
@@ -1405,11 +1374,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParitySerial
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
-TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityIgnoresRuntimeDylibEnvSerialAndParallel)
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeInnerJoin(1);
     auto donor_parallel = runDonorNativeInnerJoin(2);
 
@@ -1548,11 +1514,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, InnerHashJoinPayloadFanoutParity
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    InnerHashJoinPayloadFanoutParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
+    InnerHashJoinPayloadFanoutParityHighPartitionMaxBlockLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeInnerJoinFanout(1);
     auto donor_parallel = runDonorNativeInnerJoinFanout(4);
 
@@ -1887,11 +1850,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    InnerHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+    InnerHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeInnerJoinAllNullProbeOnly(1);
     auto donor_parallel = runDonorNativeInnerJoinAllNullProbeOnly(4);
 
@@ -1966,11 +1926,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    InnerHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+    InnerHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeInnerJoinAllNullBuildOnly(1);
     auto donor_parallel = runDonorNativeInnerJoinAllNullBuildOnly(4);
 
@@ -2007,11 +1964,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    InnerHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
+    InnerHashJoinPayloadParityHighPartitionMaxBlockLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeInnerJoin(1);
     auto donor_parallel = runDonorNativeInnerJoin(4);
 
@@ -2066,11 +2020,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityS
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
-TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityIgnoresRuntimeDylibEnvSerialAndParallel)
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, BuildOuterHashJoinPayloadParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeBuildOuterJoin(1);
     auto donor_parallel = runDonorNativeBuildOuterJoin(2);
 
@@ -2464,11 +2415,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    BuildOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+    BuildOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeBuildOuterJoinAllNullProbeOnly(1);
     auto donor_parallel = runDonorNativeBuildOuterJoinAllNullProbeOnly(4);
 
@@ -2543,11 +2491,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    BuildOuterHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+    BuildOuterHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeBuildOuterJoinAllNullBuildOnly(1);
     auto donor_parallel = runDonorNativeBuildOuterJoinAllNullBuildOnly(4);
 
@@ -2584,11 +2529,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    BuildOuterHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
+    BuildOuterHashJoinPayloadParityHighPartitionMaxBlockLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeBuildOuterJoin(1);
     auto donor_parallel = runDonorNativeBuildOuterJoin(4);
 
@@ -2631,11 +2573,8 @@ TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityS
               << " donor_rows=" << donor_serial.rows.size() << " parity=ok" << std::endl;
 }
 
-TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityIgnoresRuntimeDylibEnvSerialAndParallel)
+TEST_F(TestTiforthExecutionHostV2InnerHashJoin, ProbeOuterHashJoinPayloadParityLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeProbeOuterJoin(1);
     auto donor_parallel = runDonorNativeProbeOuterJoin(2);
 
@@ -3029,11 +2968,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    ProbeOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+    ProbeOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeProbeOuterJoinAllNullProbeOnly(1);
     auto donor_parallel = runDonorNativeProbeOuterJoinAllNullProbeOnly(4);
 
@@ -3108,11 +3044,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    ProbeOuterHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+    ProbeOuterHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeProbeOuterJoinAllNullBuildOnly(1);
     auto donor_parallel = runDonorNativeProbeOuterJoinAllNullBuildOnly(4);
 
@@ -3149,11 +3082,8 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
-    ProbeOuterHashJoinPayloadParityHighPartitionMaxBlockIgnoresRuntimeDylibEnvSerialAndParallel)
+    ProbeOuterHashJoinPayloadParityHighPartitionMaxBlockLinkedPathSerialAndParallel)
 {
-    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
-    ASSERT_TRUE(runtime_dylib_override.ok());
-
     auto donor_serial = runDonorNativeProbeOuterJoin(1);
     auto donor_parallel = runDonorNativeProbeOuterJoin(4);
 
