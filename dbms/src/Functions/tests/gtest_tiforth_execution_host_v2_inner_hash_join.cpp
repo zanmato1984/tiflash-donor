@@ -2464,6 +2464,47 @@ TEST_F(
 
 TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
+    BuildOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
+    auto donor_serial = runDonorNativeBuildOuterJoinAllNullProbeOnly(1);
+    auto donor_parallel = runDonorNativeBuildOuterJoinAllNullProbeOnly(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterBuildOuterJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        defaultBuildOuterBuildRows(),
+        allNullProbeOnlyBuildOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterBuildOuterJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        defaultBuildOuterBuildRows(),
+        allNullProbeOnlyBuildOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), defaultBuildOuterBuildRows().size());
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
     BuildOuterHashJoinPayloadAllNullBuildOnlyParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
 {
     auto donor_serial = runDonorNativeBuildOuterJoinAllNullBuildOnly(1);
@@ -2952,6 +2993,47 @@ TEST_F(
     TestTiforthExecutionHostV2InnerHashJoin,
     ProbeOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndSerialAndParallel)
 {
+    auto donor_serial = runDonorNativeProbeOuterJoinAllNullProbeOnly(1);
+    auto donor_parallel = runDonorNativeProbeOuterJoinAllNullProbeOnly(4);
+
+    ASSERT_EQ(donor_serial.warning_count, donor_parallel.warning_count);
+    ASSERT_EQ(donor_serial.rows, donor_parallel.rows);
+
+    AdapterRunResult adapter_serial;
+    runAdapterProbeOuterJoin(
+        8,
+        BATCH_OWNERSHIP_BORROW_WITHIN_CALL,
+        defaultProbeOuterBuildRows(),
+        allNullProbeOnlyProbeOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_serial);
+    AdapterRunResult adapter_parallel;
+    runAdapterProbeOuterJoin(
+        8,
+        BATCH_OWNERSHIP_FOREIGN_RETAINABLE,
+        defaultProbeOuterBuildRows(),
+        allNullProbeOnlyProbeOuterProbeRows(),
+        1,
+        false,
+        false,
+        adapter_parallel);
+
+    ASSERT_EQ(adapter_serial.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_parallel.warning_count, donor_serial.warning_count);
+    ASSERT_EQ(adapter_serial.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_parallel.rows, donor_serial.rows);
+    ASSERT_EQ(adapter_serial.rows.size(), allNullProbeOnlyProbeOuterProbeRows().size());
+}
+
+TEST_F(
+    TestTiforthExecutionHostV2InnerHashJoin,
+    ProbeOuterHashJoinPayloadAllNullProbeOnlyParityHighPartitionMaxBlockLegacyEndIgnoresRuntimeDylibEnvSerialAndParallel)
+{
+    ScopedRuntimeDylibEnvOverride runtime_dylib_override(BOGUS_RUNTIME_DYLIB_PATH);
+    ASSERT_TRUE(runtime_dylib_override.ok());
+
     auto donor_serial = runDonorNativeProbeOuterJoinAllNullProbeOnly(1);
     auto donor_parallel = runDonorNativeProbeOuterJoinAllNullProbeOnly(4);
 
